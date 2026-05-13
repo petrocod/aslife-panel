@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Ailevi / sıcak krem — spor & wellness kulüpleri için: trust + yakınlık, hâlâ yüksek okunabilirlik */
+  :root {
+    --background: 35 32% 97%;
+    --foreground: 24 14% 17%;
+    --card: 40 28% 99%;
+    --card-foreground: 24 14% 17%;
+    --popover: 40 28% 99%;
+    --popover-foreground: 24 14% 17%;
+    --primary: 17 48% 46%;
+    --primary-foreground: 40 40% 98%;
+    --secondary: 32 26% 93%;
+    --secondary-foreground: 24 18% 22%;
+    --muted: 33 22% 93%;
+    --muted-foreground: 24 10% 42%;
+    --accent: 28 32% 92%;
+    --accent-foreground: 24 18% 22%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 40 40% 98%;
+    --border: 30 20% 88%;
+    --input: 30 20% 88%;
+    --ring: 17 48% 46%;
+    --radius: 0.75rem;
+    --sidebar-background: 25 22% 18%;
+    --sidebar-foreground: 38 35% 97%;
+    --sidebar-muted: 28 14% 68%;
+    --sidebar-accent: 25 28% 26%;
+    --sidebar-border: 25 18% 26%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  }
+}
+
+.sidebar-link {
+  @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150;
+}
+
+.sidebar-link:hover {
+  @apply bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-foreground))];
+}
+
+.sidebar-link.active {
+  @apply bg-[hsl(var(--sidebar-foreground)/0.14)] text-[hsl(var(--sidebar-foreground))];
+}
+
+.sidebar-link.inactive {
+  @apply text-[hsl(var(--sidebar-muted))];
+}
+
+/* Calendar styles */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(25 14% 68%);
+}
