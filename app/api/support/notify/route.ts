@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import nodemailer from "nodemailer"
 
 const ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL || "support@inasistan.com"
 
 export async function POST(req: NextRequest) {
   try {
     const { subject, priority, companyName, userName } = await req.json()
-
-    const nodemailer = require("nodemailer") // eslint-disable-line @typescript-eslint/no-require-imports
 
     const smtpHost = process.env.SMTP_HOST
     const smtpPort = parseInt(process.env.SMTP_PORT || "587")

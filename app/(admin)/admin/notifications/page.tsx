@@ -80,9 +80,15 @@ export default function AdminNotificationsPage() {
           ) : stats.logs.map((log, i) => (
             <div key={i} className="px-4 py-3 flex items-center gap-3 text-sm">
               <div className="flex gap-1">
-                {log.sms_sent && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">SMS</span>}
-                {log.email_sent && <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">Email</span>}
-                {log.whatsapp_sent && <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">WA</span>}
+                {Boolean(log.sms_sent) && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">SMS</span>
+                )}
+                {Boolean(log.email_sent) && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">Email</span>
+                )}
+                {Boolean(log.whatsapp_sent) && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">WA</span>
+                )}
               </div>
               <span className="text-slate-600 font-medium">{String(log.template_key)}</span>
               <span className="ml-auto text-xs text-slate-400">{new Date(String(log.created_at)).toLocaleString("tr-TR")}</span>

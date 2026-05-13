@@ -103,10 +103,11 @@ export default function CompanyDetailPage() {
       }
       setCompany(companyData)
 
-      const promises: Promise<void>[] = []
+      const promises: PromiseLike<void>[] = []
 
       if (companyData.organization_id) {
         promises.push(
+          // @ts-ignore — Supabase chain typing vs Promise.allSettled
           supabase
             .from("organizations")
             .select("id, name, slug")

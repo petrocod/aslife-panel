@@ -1,0 +1,51 @@
+# استقرار خودکار برای برندهای Seyahatmarket و Money Transfer Center
+# Secrets مورد نیاز در GitHub → Settings → Secrets → Actions:
+#   DEPLOY_HOST      (IP یا hostname سرور)
+#   DEPLOY_USER      (مثلاً root یا deploy)
+#   DEPLOY_SSH_KEY   (کلید خصوصی SSH، کل محتوای فایل)
+#   DEPLOY_PATH      (مسیر مطلق پروژه روی سرور، مثلاً /root/Asistan)
+
+name: Deploy Asistan
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-asistan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            APP_DIR="${{ secrets.DEPLOY_PATH }}"
+            cd "$APP_DIR"
+
+            if [ ! -f .env.local ]; then
+              echo "::error::فایل .env.local روی سرور یافت نشد. برای اتصال Supabase آن را ایجاد کنید."
+              exit 1
+            fi
+
+            git pull origin main
+
+            npm install
+            export NEXT_DISABLE_TYPECHECK=1
+            npm run build
+
+            if pm2 describe asistan-app >/dev/null 2>&1; then
+              pm2 restart asistan-app --update-env
+            else
+              pm2 start npm --name asistan-app -- run start
+              pm2 save
+            fi

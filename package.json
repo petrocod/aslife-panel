@@ -34,6 +34,7 @@
     "iyzipay": "^2.0.67",
     "lucide-react": "^0.441.0",
     "next": "14.2.13",
+    "nodemailer": "^8.0.7",
     "react": "^18",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.4.20",

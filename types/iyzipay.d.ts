@@ -15,12 +15,10 @@ declare module "iyzipay" {
   class Iyzipay {
     constructor(config: IyzipayConfig)
     checkoutFormInitialize: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      create(request: any, callback: (err: any, result: any) => void): void
+      create(request: unknown, callback: (err: unknown, result: unknown) => void): void
     }
     checkoutForm: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      retrieve(request: any, callback: (err: any, result: any) => void): void
+      retrieve(request: unknown, callback: (err: unknown, result: unknown) => void): void
     }
     static LOCALE: { TR: string; EN: string }
     static CURRENCY: { TRY: string; USD: string; EUR: string }

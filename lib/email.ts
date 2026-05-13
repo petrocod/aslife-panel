@@ -33,9 +33,8 @@ class SmtpProvider implements EmailProvider {
         return { ok: true }
       }
 
-      // Dynamic import to avoid bundling nodemailer in client
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const nodemailer = require("nodemailer") as { createTransport: (opts: Record<string, unknown>) => { sendMail: (opts: Record<string, unknown>) => Promise<void> } }
+      // Dynamic import to avoid bundling nodemailer in client bundles
+      const { default: nodemailer } = await import("nodemailer")
       const transporter = nodemailer.createTransport({
         host: smtpHost,
         port: parseInt(smtpPort),

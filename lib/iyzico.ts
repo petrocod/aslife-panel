@@ -1,5 +1,13 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import Iyzipay from "iyzipay"
+
+function iyzicoErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as { message?: unknown }).message
+    if (typeof m === "string" && m) return m
+  }
+  return fallback
+}
 
 const iyzipay = new Iyzipay({
   apiKey: process.env.IYZICO_API_KEY || "",
@@ -80,12 +88,22 @@ export function createCheckoutForm(
       })),
     }
 
-    iyzipay.checkoutFormInitialize.create(request, (err: any, result: any) => {
+    iyzipay.checkoutFormInitialize.create(request, (err: unknown, result: unknown) => {
       if (err) {
-        resolve({ status: "failure", errorMessage: err.message || "Bağlantı hatası" })
+        resolve({
+          status: "failure",
+          errorMessage: iyzicoErrorMessage(err, "Bağlantı hatası"),
+        })
         return
       }
-      resolve(result)
+      resolve(
+        result as {
+          status: string
+          checkoutFormContent?: string
+          token?: string
+          errorMessage?: string
+        }
+      )
     })
   })
 }
@@ -96,12 +114,25 @@ export function retrieveCheckoutForm(
   return new Promise((resolve) => {
     iyzipay.checkoutForm.retrieve(
       { locale: Iyzipay.LOCALE.TR, token },
-      (err: any, result: any) => {
+      (err: unknown, result: unknown) => {
         if (err) {
-          resolve({ status: "failure", errorMessage: err.message || "Doğrulama hatası" })
+          resolve({
+            status: "failure",
+            errorMessage: iyzicoErrorMessage(err, "Doğrulama hatası"),
+          })
           return
         }
-        resolve(result)
+        resolve(
+          result as {
+            status: string
+            paymentId?: string
+            price?: number
+            paidPrice?: number
+            errorMessage?: string
+            conversationId?: string
+            basketId?: string
+          }
+        )
       }
     )
   })
