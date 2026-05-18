@@ -22,6 +22,7 @@ import {
   Headphones,
   AlertCircle,
 } from "lucide-react"
+import { SUPPORT_REPLY_TEMPLATES, getSlaStatus } from "@/lib/support-sla"
 
 type Message = {
   id: string
@@ -41,6 +42,8 @@ type TicketDetail = {
   user_email: string
   created_at: string
   updated_at: string
+  sla_due_at: string | null
+  first_response_at: string | null
   messages: Message[]
 }
 
@@ -152,6 +155,7 @@ export default function AdminTicketDetailPage({
 
   const prio = PRIORITY_MAP[ticket.priority] || PRIORITY_MAP.normal
   const stat = STATUS_MAP[ticket.status] || STATUS_MAP.open
+  const sla = getSlaStatus(ticket.sla_due_at, ticket.status)
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -171,6 +175,19 @@ export default function AdminTicketDetailPage({
             <p className="text-xs text-slate-400 mt-1">
               Oluşturulma: {formatDate(ticket.created_at)} | Güncelleme: {formatDate(ticket.updated_at)}
             </p>
+            {ticket.sla_due_at && (
+              <p
+                className={cn(
+                  "text-xs mt-1 font-medium",
+                  sla === "breached" && "text-red-600",
+                  sla === "warning" && "text-amber-600",
+                  sla === "ok" && "text-emerald-600"
+                )}
+              >
+                SLA son tarih: {formatDate(ticket.sla_due_at)}
+                {sla === "breached" && " — gecikmiş"}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge className={cn("text-[10px] border", prio.class)}>{prio.label}</Badge>
@@ -233,6 +250,20 @@ export default function AdminTicketDetailPage({
         </div>
 
         <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {SUPPORT_REPLY_TEMPLATES.map((t) => (
+              <Button
+                key={t.id}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => setReply(t.body)}
+              >
+                {t.label}
+              </Button>
+            ))}
+          </div>
           <Textarea
             placeholder="Yanıtınızı yazın..."
             value={reply}

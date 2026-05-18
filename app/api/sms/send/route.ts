@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 import { verifyCron, verifyUserBearer } from "@/lib/sms-route-auth"
 import { sendVerimorSms, type VerimorSendOptions } from "@/lib/verimor-sms"
 import { canSendNotification } from "@/lib/notification-preferences"
+import { logCustomerCommunication } from "@/lib/customer-communication"
 
 export const runtime = "nodejs"
 
@@ -83,6 +84,17 @@ export async function POST(req: NextRequest) {
         { status: 502 },
       )
     }
+    if (body.customerId && body.companyId && body.msg) {
+      await logCustomerCommunication({
+        companyId: body.companyId,
+        customerId: body.customerId,
+        channel: "sms",
+        messageBody: body.msg,
+        templateKey: "manual",
+        status: "sent",
+      })
+    }
+
     return NextResponse.json({
       ok: true,
       campaignId: result.campaignId,

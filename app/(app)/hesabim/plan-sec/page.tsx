@@ -1,59 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
-import { Check, X, ShoppingCart, Tag, AlertCircle } from "lucide-react"
+import { Check, X, ShoppingCart, Loader2 } from "lucide-react"
 import { useSubscription } from "@/hooks/useSubscription"
+import { useCatalog } from "@/hooks/useCatalog"
+import { useCart } from "@/contexts/CartContext"
+import { formatTry, planUnitPrice } from "@/lib/catalog/defaults"
 import { cn } from "@/lib/utils"
-
-const plans = [
-  {
-    id: "asistan" as const,
-    name: "ASİSTAN",
-    price: "₺750,00",
-    priceNum: 750,
-    yearlyPrice: "Yılda ₺9.000,00 + %20 KDV olarak faturalandırılacaktır.",
-    vat: "%20 KDV",
-    users: "Maks. 1 Kullanıcı",
-    description: "Tek kişilik küçük bir işletmenin günlük faaliyetlerini yönetmek için ideal!",
-    sms: "Ücretsiz 250 SMS dahil",
-    smsCount: "1 Kullanıcı, 250 SMS",
-  },
-  {
-    id: "asistan_plus" as const,
-    name: "ASİSTAN +",
-    price: "₺1.500,00",
-    priceNum: 1500,
-    yearlyPrice: "Yılda ₺18.000,00 + %20 KDV olarak faturalandırılacaktır.",
-    vat: "%20 KDV",
-    users: "Maks. 3 Kullanıcı",
-    description: "Günlük randevu operasyonlarını rahat yönetin ve kolayca büyütün!",
-    sms: "Ücretsiz 750 SMS dahil",
-    smsCount: "3 Kullanıcı, 750 SMS",
-    highlighted: true,
-  },
-  {
-    id: "asistan_pro" as const,
-    name: "ASİSTAN PRO",
-    price: "₺2.100,00",
-    priceNum: 2100,
-    yearlyPrice: "Yılda ₺25.200,00 + %20 KDV olarak faturalandırılacaktır.",
-    vat: "%20 KDV",
-    users: "Maks. 6 Kullanıcı",
-    description: "Profesyonel bir işletme için gereken her şey limitsiz. Rekabette fark yaratın!",
-    sms: "Ücretsiz 1500 SMS dahil",
-    smsCount: "6 Kullanıcı, 1500 SMS",
-  },
-]
+import type { CatalogPlan } from "@/lib/catalog/types"
 
 const features = [
   { name: "Takvim kullanımı ve randevu oluşturma", asistan: true, asistanPlus: true, asistanPro: true },
@@ -73,52 +29,41 @@ const features = [
   { name: "e-Fatura entegrasyonu", asistan: false, asistanPlus: false, asistanPro: true },
 ]
 
-function formatCurrency(num: number) {
-  return `₺${num.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+function yearlyNote(plan: CatalogPlan) {
+  const annualWithVat = plan.annual_price * 1.2
+  return `Yılda ${formatTry(annualWithVat)} (KDV dahil) olarak faturalandırılacaktır.`
 }
 
 export default function PlanSecPage() {
   const [billing, setBilling] = useState<"yearly" | "monthly">("yearly")
   const { planId, planName, loading: subLoading } = useSubscription()
-  const router = useRouter()
-
+  const { catalog, loading: catalogLoading } = useCatalog()
+  const { addItem, itemCount } = useCart()
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [couponCode, setCouponCode] = useState("")
-  const [couponError, setCouponError] = useState<string | null>(null)
+  const [addedToast, setAddedToast] = useState(false)
 
+  const plans = catalog.plans
   const selectedPlan = plans.find((p) => p.id === selectedPlanId)
+  const loading = subLoading || catalogLoading
 
   const handleCardClick = (planIdValue: string, isCurrent: boolean) => {
     if (isCurrent) return
     setSelectedPlanId((prev) => (prev === planIdValue ? null : planIdValue))
   }
 
-  const handleOpenDialog = () => {
-    setCouponCode("")
-    setCouponError(null)
-    setDialogOpen(true)
-  }
-
-  const handleApplyCoupon = () => {
-    if (couponCode.trim()) {
-      setCouponError("Geçersiz kupon")
-    }
-  }
-
-  const handleProceedToPayment = () => {
-    if (!selectedPlanId) return
-    const params = new URLSearchParams({
+  const handleAddToCart = () => {
+    if (!selectedPlan) return
+    const unitPrice = planUnitPrice(selectedPlan, billing)
+    addItem({
       type: "subscription",
-      planId: selectedPlanId,
+      productKey: selectedPlan.id,
+      title: `${selectedPlan.name_tr} (${billing === "yearly" ? "Yıllık" : "Aylık"})`,
+      unitPrice,
+      billing,
     })
-    if (couponCode.trim()) params.set("coupon", couponCode.trim())
-    router.push(`/hesabim/odeme?${params.toString()}`)
+    setAddedToast(true)
+    setTimeout(() => setAddedToast(false), 2500)
   }
-
-  const planPrice = selectedPlan?.priceNum ?? 0
-  const kdvAmount = planPrice * 0.2
-  const totalAmount = planPrice + kdvAmount
 
   return (
     <div className="p-6">
@@ -127,14 +72,22 @@ export default function PlanSecPage() {
         <div className="flex flex-col items-center gap-3">
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setBilling("yearly")}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${billing === "yearly" ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-600"}`}
+              className={cn(
+                "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                billing === "yearly" ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-600"
+              )}
             >
               Yıllık Abonelik
             </button>
             <button
+              type="button"
               onClick={() => setBilling("monthly")}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${billing === "monthly" ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-600"}`}
+              className={cn(
+                "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                billing === "monthly" ? "bg-orange-500 text-white" : "bg-slate-100 text-slate-600"
+              )}
             >
               Aylık Abonelik
             </button>
@@ -151,201 +104,142 @@ export default function PlanSecPage() {
         <p>Planlar</p>
         <ul className="list-disc list-inside space-y-0.5 ml-2">
           <li>Ücretsiz deneme sürecinde kredi kartı bilginizi vermeniz gerekmez.</li>
-          <li><strong>Kullanıcı sayısı</strong> uygulamada kullanılacak olan ve ekleyebileceğiniz maximum kişi sayısını ifade eder</li>
-          <li>Yıllık Paketlerde faturalama <strong>Yıllık</strong> olarak Aylık Paketlerde ise <strong>Aylık</strong> olarak yapılmaktadır.</li>
+          <li>
+            <strong>Kullanıcı sayısı</strong> uygulamada kullanılacak olan ve ekleyebileceğiniz maximum kişi
+            sayısını ifade eder
+          </li>
+          <li>
+            Yıllık Paketlerde faturalama <strong>Yıllık</strong> olarak Aylık Paketlerde ise{" "}
+            <strong>Aylık</strong> olarak yapılmaktadır.
+          </li>
         </ul>
       </div>
 
-      {/* Plan cards */}
-      {!subLoading && planId && (
+      {!loading && planId && (
         <p className="text-center text-sm text-slate-600 mb-4">
-          Mevcut planınız: <strong className="text-slate-800">{planName}</strong> — yükseltmek için aşağıdan seçim yapabilirsiniz.
+          Mevcut planınız: <strong className="text-slate-800">{planName}</strong> — yükseltmek için aşağıdan seçim
+          yapabilirsiniz.
         </p>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        {plans.map((plan) => {
-          const isCurrent = planId === plan.id
-          const isSelected = selectedPlanId === plan.id
-          return (
-            <div
-              key={plan.id}
-              onClick={() => handleCardClick(plan.id, isCurrent)}
-              className={cn(
-                "relative rounded-xl border-2 p-6 transition-all duration-200",
-                isCurrent
-                  ? "ring-2 ring-emerald-500 ring-offset-2 border-emerald-400/80 cursor-default opacity-80"
-                  : "cursor-pointer hover:shadow-lg",
-                !isCurrent && isSelected
-                  ? "border-orange-500 shadow-xl scale-[1.02]"
-                  : !isCurrent && plan.highlighted
-                    ? "border-orange-400 shadow-lg hover:border-orange-500"
-                    : !isCurrent
-                      ? "border-slate-200 hover:border-orange-200"
-                      : "",
-              )}
-            >
-              {isCurrent && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full">
-                  Mevcut Plan
-                </div>
-              )}
-              {!isCurrent && isSelected && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                  <Check className="h-3 w-3" /> Seçildi
-                </div>
-              )}
-              {plan.highlighted && !isSelected && !isCurrent && (
-                <div className="bg-orange-500 text-white text-[10px] font-bold px-3 py-1 rounded-full w-fit mb-3">
-                  EN POPÜLER
-                </div>
-              )}
-              <p className="text-xs font-bold text-orange-500 mb-1">{plan.name}</p>
-              <div className="flex items-end gap-1 mb-1">
-                <span className="text-3xl font-bold text-slate-800">{plan.price}</span>
-                <span className="text-xs text-slate-500 mb-1">/ ay</span>
-              </div>
-              <p className="text-xs text-slate-500 mb-1">+ {plan.vat}</p>
-              <p className="text-sm font-medium text-slate-700 mb-2">{plan.users}</p>
-              <p className="text-xs text-slate-500 mb-4 leading-relaxed">{plan.description}</p>
-              <p className="text-xs font-medium text-slate-700 mb-1">{plan.sms}</p>
-              <p className="text-xs text-slate-500 mb-4">{plan.smsCount}</p>
-              <Button
-                className={cn(
-                  "w-full transition-all",
-                  isSelected && "bg-orange-500 hover:bg-orange-600 text-white",
-                )}
-                variant={isSelected ? "default" : plan.highlighted ? "default" : "outline"}
-                disabled={isCurrent}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleCardClick(plan.id, isCurrent)
-                }}
-              >
-                {isCurrent ? "Mevcut Plan" : isSelected ? "✓ Seçildi" : "Seç"}
-              </Button>
-              <p className="text-xs text-slate-400 mt-3 text-center">{plan.yearlyPrice}</p>
-            </div>
-          )
-        })}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            {plans.map((plan) => {
+              const isCurrent = planId === plan.id
+              const isSelected = selectedPlanId === plan.id
+              const displayPrice =
+                billing === "yearly"
+                  ? formatTry(plan.annual_price / 12)
+                  : formatTry(plan.monthly_price)
+              const highlighted = plan.highlighted
 
-      {/* Buy button */}
-      <div className="flex justify-center mb-10">
-        <Button
-          size="lg"
-          disabled={!selectedPlanId}
-          onClick={handleOpenDialog}
-          className={cn(
-            "px-10 py-3 text-base font-semibold transition-all",
-            selectedPlanId
-              ? "bg-orange-500 hover:bg-orange-600 text-white shadow-lg"
-              : "bg-slate-200 text-slate-400 cursor-not-allowed",
-          )}
-        >
-          <ShoppingCart className="h-5 w-5 mr-2" />
-          Satın Al
-        </Button>
-      </div>
-
-      {/* Payment Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-slate-800">Ödeme Özeti</DialogTitle>
-          </DialogHeader>
-
-          {selectedPlan && (
-            <div className="space-y-5">
-              {/* Plan summary */}
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-orange-600">{selectedPlan.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{selectedPlan.users} · {billing === "yearly" ? "Yıllık" : "Aylık"}</p>
+              return (
+                <div
+                  key={plan.id}
+                  onClick={() => handleCardClick(plan.id, isCurrent)}
+                  className={cn(
+                    "relative rounded-xl border-2 p-6 transition-all duration-200 bg-white",
+                    isCurrent
+                      ? "ring-2 ring-emerald-500 ring-offset-2 border-emerald-400/80 cursor-default opacity-80"
+                      : "cursor-pointer hover:shadow-lg",
+                    !isCurrent && isSelected
+                      ? "border-orange-500 shadow-xl scale-[1.02]"
+                      : !isCurrent && highlighted
+                        ? "border-orange-400 shadow-lg hover:border-orange-500"
+                        : !isCurrent
+                          ? "border-slate-200 hover:border-orange-200"
+                          : ""
+                  )}
+                >
+                  {isCurrent && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full">
+                      Mevcut Plan
+                    </div>
+                  )}
+                  {!isCurrent && isSelected && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                      <Check className="h-3 w-3" /> Seçildi
+                    </div>
+                  )}
+                  {highlighted && !isSelected && !isCurrent && (
+                    <div className="bg-orange-500 text-white text-[10px] font-bold px-3 py-1 rounded-full w-fit mb-3">
+                      EN POPÜLER
+                    </div>
+                  )}
+                  <p className="text-xs font-bold text-orange-500 mb-1">{plan.name_tr}</p>
+                  <div className="flex items-end gap-1 mb-1">
+                    <span className="text-3xl font-bold text-slate-800">{displayPrice}</span>
+                    <span className="text-xs text-slate-500 mb-1">/ ay</span>
                   </div>
-                  <p className="text-lg font-bold text-slate-800">{selectedPlan.price}<span className="text-xs font-normal text-slate-500"> /ay</span></p>
-                </div>
-              </div>
-
-              {/* Coupon field */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-                  <Tag className="h-3.5 w-3.5 inline mr-1.5 text-slate-400" />
-                  Kupon Kodu
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Kupon kodunuzu girin"
-                    value={couponCode}
-                    onChange={(e) => {
-                      setCouponCode(e.target.value)
-                      setCouponError(null)
-                    }}
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={handleApplyCoupon}
-                    disabled={!couponCode.trim()}
-                    className="shrink-0"
-                  >
-                    Uygula
-                  </Button>
-                </div>
-                {couponError && (
-                  <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    {couponError}
+                  <p className="text-xs text-slate-500 mb-1">+ %20 KDV</p>
+                  <p className="text-sm font-medium text-slate-700 mb-2">Maks. {plan.max_users} Kullanıcı</p>
+                  <p className="text-xs text-slate-500 mb-4 leading-relaxed">{plan.description_tr}</p>
+                  <p className="text-xs font-medium text-slate-700 mb-1">
+                    Ücretsiz {plan.sms_included} SMS dahil
                   </p>
-                )}
-              </div>
+                  <p className="text-xs text-slate-500 mb-4">
+                    {plan.max_users} Kullanıcı, {plan.sms_included} SMS
+                  </p>
+                  <Button
+                    className={cn(
+                      "w-full transition-all",
+                      isSelected && "bg-orange-500 hover:bg-orange-600 text-white"
+                    )}
+                    variant={isSelected ? "default" : highlighted ? "default" : "outline"}
+                    disabled={isCurrent}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCardClick(plan.id, isCurrent)
+                    }}
+                  >
+                    {isCurrent ? "Mevcut Plan" : isSelected ? "✓ Seçildi" : "Seç"}
+                  </Button>
+                  <p className="text-xs text-slate-400 mt-3 text-center">{yearlyNote(plan)}</p>
+                </div>
+              )
+            })}
+          </div>
 
-              {/* Price breakdown */}
-              <div className="border-t border-slate-200 pt-4 space-y-2">
-                <div className="flex justify-between text-sm text-slate-600">
-                  <span>Plan Ücreti</span>
-                  <span>{formatCurrency(planPrice)}</span>
-                </div>
-                <div className="flex justify-between text-sm text-slate-600">
-                  <span>KDV (%20)</span>
-                  <span>{formatCurrency(kdvAmount)}</span>
-                </div>
-                <div className="flex justify-between text-base font-bold text-slate-800 border-t border-slate-200 pt-2">
-                  <span>Toplam</span>
-                  <span>{formatCurrency(totalAmount)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="mt-2">
+          <div className="flex flex-col items-center gap-3 mb-10">
             <Button
-              onClick={handleProceedToPayment}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 text-base"
               size="lg"
+              disabled={!selectedPlanId}
+              onClick={handleAddToCart}
+              className={cn(
+                "px-10 py-3 text-base font-semibold transition-all",
+                selectedPlanId
+                  ? "bg-orange-500 hover:bg-orange-600 text-white shadow-lg"
+                  : "bg-slate-200 text-slate-400 cursor-not-allowed"
+              )}
             >
-              Ödemeye Geç
+              <ShoppingCart className="h-5 w-5 mr-2" />
+              Sepete Ekle
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Features table */}
-      <div className="text-center mb-4">
-        <button className="text-sm text-slate-600 border border-slate-200 rounded-full px-4 py-2 hover:bg-slate-50">
-          Tüm özellikleri gizle
-        </button>
-      </div>
+            {addedToast && (
+              <p className="text-sm text-emerald-600 font-medium">Plan sepete eklendi!</p>
+            )}
+            <Button variant="outline" asChild>
+              <Link href="/sepet">
+                Sepete Git {itemCount > 0 ? `(${itemCount})` : ""}
+              </Link>
+            </Button>
+          </div>
+        </>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100">
               <th className="text-left px-6 py-4 font-semibold text-slate-700">Özellikler</th>
-              {plans.map(p => (
+              {plans.map((p) => (
                 <th key={p.id} className="px-6 py-4 text-center">
-                  <span className="text-orange-500 font-bold text-xs">{p.name}</span>
+                  <span className="text-orange-500 font-bold text-xs">{p.name_tr}</span>
                 </th>
               ))}
             </tr>
@@ -357,9 +251,11 @@ export default function PlanSecPage() {
                 {[f.asistan, f.asistanPlus, f.asistanPro].map((val, i) => (
                   <td key={i} className="px-6 py-3 text-center">
                     {typeof val === "boolean" ? (
-                      val
-                        ? <Check className="h-4 w-4 text-green-500 mx-auto" />
-                        : <X className="h-4 w-4 text-red-400 mx-auto" />
+                      val ? (
+                        <Check className="h-4 w-4 text-green-500 mx-auto" />
+                      ) : (
+                        <X className="h-4 w-4 text-red-400 mx-auto" />
+                      )
                     ) : (
                       <span className="text-xs text-slate-600">{val}</span>
                     )}

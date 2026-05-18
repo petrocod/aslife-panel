@@ -53,6 +53,7 @@ import {
   type AsistanDatePreset,
   type BarPoint,
 } from "@/lib/asistan-range"
+import { AsistanExportButtons } from "@/components/asistan/AsistanExportButtons"
 
 function formatTry(n: number) {
   return `₺${n.toLocaleString("tr-TR", {
@@ -900,6 +901,8 @@ function AsistanPage() {
                   Yükleniyor…
                 </span>
               )}
+              <AsistanExportButtons tab={tab} preset={preset} data={data} />
+
               <button
                 type="button"
                 title="Tarih aralığı ve KDV seçimi tüm sekmelerdeki verilere uygulanır. Gelir grafiği ödeme (tahsilat) tarihine göre satış dağılımını gösterir."

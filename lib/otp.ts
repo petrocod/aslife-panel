@@ -9,6 +9,24 @@ const supabaseAdmin = createClient(
 const OTP_LENGTH = 6
 const OTP_TTL_MINUTES = 5
 const OTP_RATE_LIMIT_SECONDS = 60
+const OTP_IP_RATE_LIMIT_SECONDS = 120
+const OTP_IP_MAX_PER_WINDOW = 5
+
+const ipOtpAttempts = new Map<string, { count: number; windowStart: number }>()
+
+function checkIpRateLimit(ip: string): string | null {
+  const now = Date.now()
+  const entry = ipOtpAttempts.get(ip)
+  if (!entry || now - entry.windowStart > OTP_IP_RATE_LIMIT_SECONDS * 1000) {
+    ipOtpAttempts.set(ip, { count: 1, windowStart: now })
+    return null
+  }
+  entry.count += 1
+  if (entry.count > OTP_IP_MAX_PER_WINDOW) {
+    return "Çok fazla istek. Lütfen birkaç dakika sonra tekrar deneyin."
+  }
+  return null
+}
 
 function generateCode(): string {
   const digits = "0123456789"
@@ -19,7 +37,14 @@ function generateCode(): string {
   return code
 }
 
-export async function sendOtp(phone: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function sendOtp(
+  phone: string,
+  clientIp?: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (clientIp) {
+    const ipErr = checkIpRateLimit(clientIp)
+    if (ipErr) return { ok: false, error: ipErr }
+  }
   let cleaned = phone.replace(/\D/g, "")
   if (cleaned.length < 10) {
     return { ok: false, error: "Geçersiz telefon numarası." }

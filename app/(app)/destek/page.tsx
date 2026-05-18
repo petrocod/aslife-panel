@@ -25,6 +25,7 @@ import {
   Loader2,
   ArrowLeft,
 } from "lucide-react"
+import { computeSlaDueAt, SUPPORT_SLA_HOURS } from "@/lib/support-sla"
 
 type Ticket = {
   id: string
@@ -131,6 +132,7 @@ export default function DestekPage() {
     setCreating(true)
     const { data: { user } } = await supabase.auth.getUser()
 
+    const now = new Date().toISOString()
     const { data: ticket } = await supabase
       .from("support_tickets")
       .insert({
@@ -138,6 +140,7 @@ export default function DestekPage() {
         user_id: user?.id,
         subject: subject.trim(),
         priority,
+        sla_due_at: computeSlaDueAt(now),
       })
       .select()
       .single()
@@ -313,6 +316,9 @@ export default function DestekPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Yeni Destek Talebi</CardTitle>
+              <p className="text-xs text-blue-700 mt-2">
+                İlk yanıt hedefi: {SUPPORT_SLA_HOURS} saat (iş günü içi).
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>

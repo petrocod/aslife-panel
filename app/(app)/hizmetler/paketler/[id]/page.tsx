@@ -19,6 +19,9 @@ import { cn } from "@/lib/utils"
 import { supabaseData as supabase } from "@/lib/supabase-data"
 import { useCompany, DEMO_COMPANY_ID } from "@/hooks/useCompany"
 import { recordIncomeFromPackageSale } from "@/lib/finance/integration"
+import { PrintableDocumentDialog } from "@/components/documents/PrintableDocumentDialog"
+import { usePrintableReceipt } from "@/hooks/usePrintableReceipt"
+import { buildPackageSaleBody } from "@/lib/documents/receipt-types"
 import { DateInput } from "@/components/shared/DateInput"
 import {
   PackageSaleSuccessDialog,
@@ -76,6 +79,7 @@ function SatisPanel({
   const [discountType, setDiscountType] = useState<"amount" | "percent">("amount")
   const [saving,       setSaving]       = useState(false)
   const [error,        setError]        = useState("")
+  const { receiptOpen, setReceiptOpen, receiptPayload, openReceipt } = usePrintableReceipt()
 
   const base     = Number(fee) || 0
   const discount = discountType === "percent" ? (base * (Number(discountVal) || 0)) / 100 : (Number(discountVal) || 0)
@@ -108,6 +112,20 @@ function SatisPanel({
         customerId,
         packageName: pkg.name,
         customerName: cname,
+      })
+      openReceipt({
+        title: "Paket Satış Sözleşmesi / Makbuz",
+        subtitle: pkg.name,
+        customerName: cname,
+        referenceNo: row.id.slice(0, 8).toUpperCase(),
+        lineItems: [
+          { label: "Paket", value: pkg.name },
+          { label: "Başlangıç", value: startDate },
+          { label: "Bitiş", value: endDate || "—" },
+          ...(discount > 0 ? [{ label: "İndirim", value: `₺${discount.toFixed(2)}` }] : []),
+        ],
+        totalAmount: `₺${total.toFixed(2)}`,
+        defaultBody: buildPackageSaleBody(cname, pkg.name, `₺${total.toFixed(2)}`),
       })
     }
     onSaved(); onClose()
@@ -199,6 +217,12 @@ function SatisPanel({
           </Button>
         </div>
       </div>
+      <PrintableDocumentDialog
+        open={receiptOpen}
+        onOpenChange={setReceiptOpen}
+        companyId={companyId || DEMO_COMPANY_ID}
+        payload={receiptPayload}
+      />
     </>
   )
 }

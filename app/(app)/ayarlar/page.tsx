@@ -60,6 +60,12 @@ const settingsItems = [
     description: "Plan yönetimi, kullanıcı erişim seviyeleri ve modül ayarları",
   },
   {
+    href: "/ayarlar/kullanici-yetkileri",
+    icon: Users,
+    title: "Kullanıcı yetkileri",
+    description: "Çalışanların menü ve modül erişimini açıp kapatın",
+  },
+  {
     href: "/ayarlar/entegrasyonlar",
     icon: Link2,
     title: "Entegrasyonlar",

@@ -32,6 +32,11 @@ import {
 import { NotificationSection } from "@/components/shared/NotificationSection"
 import { DateInput } from "@/components/shared/DateInput"
 import { sendUsageSmsOnCompletion } from "@/lib/auto-sms-triggers"
+import { hasAppointmentConflicts, type AppointmentSlot } from "@/lib/appointments/conflict-check"
+import { ConflictWarnDialog } from "@/components/appointments/ConflictWarnDialog"
+import { PrintableDocumentDialog } from "@/components/documents/PrintableDocumentDialog"
+import { usePrintableReceipt } from "@/hooks/usePrintableReceipt"
+import { buildPaymentReceiptBody, mapPaymentMethodLabel } from "@/lib/documents/receipt-types"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type DbAppointment = {
@@ -439,10 +444,9 @@ function NewAppointmentModal({
     onClose()
   }
 
-  // ── Conflict check + go to step 3 ──────────────────────────────────────────
-  async function goToStep3() {
+  function buildAppointmentSlots(): AppointmentSlot[] {
     const endTime = calcEndTime()
-    const allSlots = [
+    return [
       { date: appointmentDate, start: startTime, end: endTime, employeeId, locationId },
       ...extraServices.filter((es) => es.serviceId).map((es) => {
         const dur = Number(es.durationHours) * 60 + Number(es.durationMins)
@@ -450,28 +454,22 @@ function NewAppointmentModal({
         const [sh, sm] = sTime.split(":").map(Number)
         const eMins = sh * 60 + sm + (dur || 60)
         const eTime = `${String(Math.floor(eMins / 60) % 24).padStart(2, "0")}:${String(eMins % 60).padStart(2, "0")}`
-        return { date: es.date || appointmentDate, start: sTime, end: eTime, employeeId: es.employeeId, locationId: es.locationId }
+        return {
+          date: es.date || appointmentDate,
+          start: sTime,
+          end: eTime,
+          employeeId: es.employeeId,
+          locationId: es.locationId,
+        }
       }),
     ]
+  }
 
-    let hasConflict = false
-    for (const slot of allSlots) {
-      if (!slot.date || !slot.start || !slot.end) continue
-      const { data: existing } = await supabase
-        .from("appointments")
-        .select("id,start_time,end_time,employee_id,location_id")
-        .eq("appointment_date", slot.date)
-        .neq("status", "iptal")
-      for (const ex of (existing || [])) {
-        const overlap = slot.start < ex.end_time && slot.end > ex.start_time
-        if (!overlap) continue
-        if (slot.employeeId && ex.employee_id === slot.employeeId) { hasConflict = true; break }
-        if (slot.locationId && ex.location_id === slot.locationId) { hasConflict = true; break }
-      }
-      if (hasConflict) break
-    }
-
-    if (hasConflict) { setShowConflictWarn(true) } else { setStep(3) }
+  // ── Conflict check + go to step 3 ──────────────────────────────────────────
+  async function goToStep3() {
+    const conflict = await hasAppointmentConflicts(supabase, buildAppointmentSlots())
+    if (conflict) setShowConflictWarn(true)
+    else setStep(3)
   }
 
   async function handleConfirm() {
@@ -1056,47 +1054,22 @@ function NewAppointmentModal({
     </Dialog>
 
     {/* ── Conflict warning dialog ── */}
-    <Dialog open={showConflictWarn} onOpenChange={setShowConflictWarn}>
-      <DialogContent className="max-w-[380px] p-0 overflow-hidden rounded-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="text-base font-bold text-slate-800">Kesişen Randevu</h3>
-        </div>
-        <div className="px-5 py-5 text-center space-y-4">
-          <div className="flex justify-center">
-            <div className="w-16 h-16 rounded-full bg-amber-400 flex items-center justify-center shadow-lg">
-              <AlertCircle className="h-8 w-8 text-white" />
-            </div>
-          </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-left">
-            <p className="text-xs text-amber-700 leading-relaxed">
-              • Seçilen çalışan veya hizmet yeri bu saatte başka bir randevuya sahip.
-              Yine de devam etmek istiyor musunuz?
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-3 px-5 pb-5">
-          <button
-            onClick={() => setShowConflictWarn(false)}
-            className="flex-1 h-10 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            Vazgeç
-          </button>
-          <button
-            onClick={() => { setShowConflictWarn(false); setStep(3) }}
-            className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium text-white transition-colors"
-          >
-            Devam Et
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <ConflictWarnDialog
+      open={showConflictWarn}
+      onOpenChange={setShowConflictWarn}
+      onCancel={() => setShowConflictWarn(false)}
+      onContinue={() => {
+        setShowConflictWarn(false)
+        setStep(3)
+      }}
+    />
 
     {/* ── Past date warning dialog ── */}
     <Dialog open={showPastWarn} onOpenChange={(v) => { if (!v) { setShowPastWarn(false); handleClose() } }}>
       <DialogContent className="max-w-[380px] p-0 overflow-hidden rounded-2xl">
         {/* Title bar */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="text-base font-bold text-slate-800">Kesişen Randevu</h3>
+          <h3 className="text-base font-bold text-slate-800">Geçmiş Tarih</h3>
         </div>
         <div className="px-5 py-5 text-center space-y-4">
           <div className="flex justify-center">
@@ -1659,6 +1632,8 @@ function PaymentPanel({
   >([])
   const [showHistory, setShowHistory] = useState(false)
   const { companyId } = useCompany()
+  const effectiveCompanyId = companyId || DEMO_COMPANY_ID
+  const { receiptOpen, setReceiptOpen, receiptPayload, openReceipt } = usePrintableReceipt()
 
   useEffect(() => {
     supabase
@@ -1718,12 +1693,32 @@ function PaymentPanel({
         )
       )
     if (!finErr) {
+      const amt = Number(amount)
+      const cname = app.customers?.full_name || "Müşteri"
+      openReceipt({
+        title: "Ödeme Makbuzu",
+        subtitle: app.services?.name || "Randevu",
+        customerName: cname,
+        referenceNo: app.id.slice(0, 8).toUpperCase(),
+        lineItems: [
+          { label: "Hizmet", value: app.services?.name || "—" },
+          { label: "Tarih", value: format(parseISO(payDate), "dd.MM.yyyy", { locale: tr }) },
+        ],
+        totalAmount: `₺${amt.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`,
+        paymentMethod: mapPaymentMethodLabel(method),
+        defaultBody: buildPaymentReceiptBody(
+          cname,
+          `₺${amt.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`,
+          `${app.services?.name || "Randevu"} randevusu`
+        ),
+      })
       onSaved()
       onClose()
     }
   }
 
   return (
+    <>
     <div className="w-full h-full border-l border-slate-200 bg-white flex flex-col">
       {/* Header */}
       <div className="flex items-start justify-between px-5 py-4 border-b border-slate-200">
@@ -1841,6 +1836,13 @@ function PaymentPanel({
         </button>
       </div>
     </div>
+    <PrintableDocumentDialog
+      open={receiptOpen}
+      onOpenChange={setReceiptOpen}
+      companyId={effectiveCompanyId}
+      payload={receiptPayload}
+    />
+    </>
   )
 }
 

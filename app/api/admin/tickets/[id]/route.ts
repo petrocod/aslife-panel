@@ -55,6 +55,8 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     user_id: ticket.user_id,
     created_at: ticket.created_at,
     updated_at: ticket.updated_at,
+    sla_due_at: ticket.sla_due_at,
+    first_response_at: ticket.first_response_at,
     company_name: companyRes.data?.name || "—",
     user_name: profileRes.data?.full_name || "—",
     user_email: profileRes.data?.email || "—",
@@ -132,10 +134,21 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  await supabase
+  const { data: existing } = await supabase
     .from("support_tickets")
-    .update({ updated_at: new Date().toISOString() })
+    .select("first_response_at, status")
     .eq("id", id)
+    .single()
+
+  const ticketUpdates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    status: existing?.status === "open" ? "in_progress" : existing?.status,
+  }
+  if (!existing?.first_response_at) {
+    ticketUpdates.first_response_at = new Date().toISOString()
+  }
+
+  await supabase.from("support_tickets").update(ticketUpdates).eq("id", id)
 
   return NextResponse.json(msg, { status: 201 })
 }

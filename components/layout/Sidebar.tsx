@@ -25,7 +25,10 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCompany } from "@/hooks/useCompany"
+import { usePlatformFlags } from "@/hooks/usePlatformFlags"
+import { useProfilePermissions } from "@/hooks/useProfilePermissions"
 import { DEMO_COMPANY_ID, DEMO_MAX_APPOINTMENTS } from "@/lib/demo-limits"
+import type { PermissionModuleKey } from "@/lib/profile-permissions"
 
 interface NavItem {
   label: string
@@ -33,6 +36,10 @@ interface NavItem {
   icon: React.ReactNode
   badge?: string
   children?: NavItem[]
+  /** Module permission key; omitted = always visible if parent visible */
+  permission?: PermissionModuleKey
+  /** Platform flag key from feature_flags */
+  platformFlag?: "online_randevu" | "siniflar_module"
 }
 
 const navItems: NavItem[] = [
@@ -40,44 +47,61 @@ const navItems: NavItem[] = [
     label: "Randevular",
     href: "/randevular/takvim",
     icon: <CalendarDays className="h-4 w-4" />,
+    permission: "randevular",
     children: [
       { label: "Takvim", href: "/randevular/takvim", icon: <CalendarDays className="h-4 w-4" /> },
-      { label: "Online", href: "/randevular/online", icon: <Globe className="h-4 w-4" />, badge: "•" },
+      {
+        label: "Online",
+        href: "/randevular/online",
+        icon: <Globe className="h-4 w-4" />,
+        platformFlag: "online_randevu",
+      },
     ],
   },
   {
     label: "Ödemeler",
     href: "/odemeler",
     icon: <CreditCard className="h-4 w-4" />,
+    permission: "odemeler",
   },
   {
     label: "Finans",
     href: "/admin/finance",
     icon: <BarChart3 className="h-4 w-4" />,
+    permission: "finans",
   },
   {
     label: "Müşteriler",
     href: "/musteriler",
     icon: <Users className="h-4 w-4" />,
+    permission: "musteriler",
   },
   {
     label: "Hizmetler",
     icon: <Wrench className="h-4 w-4" />,
+    permission: "hizmetler",
     children: [
       { label: "Hizmet listesi", href: "/hizmetler/hizmet-listesi", icon: <Layers className="h-4 w-4" /> },
       { label: "Paketler", href: "/hizmetler/paketler", icon: <Package className="h-4 w-4" /> },
-      { label: "Sınıflar", href: "/hizmetler/siniflar", icon: <GraduationCap className="h-4 w-4" /> },
+      {
+        label: "Sınıflar",
+        href: "/hizmetler/siniflar",
+        icon: <GraduationCap className="h-4 w-4" />,
+        platformFlag: "siniflar_module",
+      },
     ],
   },
   {
     label: "Ürünler",
     href: "/urunler",
     icon: <ShoppingBag className="h-4 w-4" />,
+    permission: "urunler",
   },
   {
     label: "Pazarlama",
     icon: <Megaphone className="h-4 w-4" />,
     badge: "YENİ",
+    permission: "pazarlama",
     children: [
       { label: "Hedef Kitleler", href: "/pazarlama/hedef-kitleler", icon: <Target className="h-4 w-4" /> },
       { label: "Kampanyalar", href: "/pazarlama/kampanyalar", icon: <Megaphone className="h-4 w-4" /> },
@@ -87,21 +111,48 @@ const navItems: NavItem[] = [
     label: "Asistan",
     href: "/asistan",
     icon: <Bot className="h-4 w-4" />,
+    permission: "asistan",
   },
   {
     label: "Ayarlar",
     href: "/ayarlar",
     icon: <Settings className="h-4 w-4" />,
+    permission: "ayarlar",
   },
   {
     label: "Bildirim Paketleri",
     icon: <Bell className="h-4 w-4" />,
+    permission: "bildirim_paketleri",
     children: [
       { label: "SMS", href: "/bildirim-paketleri/sms", icon: <MessageSquare className="h-4 w-4" /> },
       { label: "Whatsapp", href: "/bildirim-paketleri/whatsapp", icon: <MessageSquare className="h-4 w-4" /> },
     ],
   },
 ]
+
+function filterNavItems(
+  items: NavItem[],
+  opts: {
+    onlineRandevu: boolean
+    siniflarModule: boolean
+    canAccess: (m: PermissionModuleKey) => boolean
+  }
+): NavItem[] {
+  return items
+    .map((item) => {
+      if (item.platformFlag === "online_randevu" && !opts.onlineRandevu) return null
+      if (item.platformFlag === "siniflar_module" && !opts.siniflarModule) return null
+      if (item.permission && !opts.canAccess(item.permission)) return null
+
+      let children = item.children
+      if (children?.length) {
+        children = filterNavItems(children, opts)
+        if (children.length === 0 && !item.href) return null
+      }
+      return { ...item, children }
+    })
+    .filter(Boolean) as NavItem[]
+}
 
 /** Aktif bağlantı: path eşlemesi (?sonrası yok sayılır); alt route’lar da aktif sayılır */
 function navHrefActive(pathname: string, href: string): boolean {
@@ -212,14 +263,17 @@ function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { companyId, userId, role } = useCompany()
+  const { companyId, userId } = useCompany()
+  const { onlineRandevu, siniflarModule } = usePlatformFlags()
+  const { canAccess } = useProfilePermissions()
 
   const visibleNav = useMemo(() => {
-    if (userId && role === "employee") {
-      return navItems.filter((item) => item.href !== "/admin/finance")
-    }
-    return navItems
-  }, [userId, role])
+    return filterNavItems(navItems, {
+      onlineRandevu,
+      siniflarModule,
+      canAccess,
+    })
+  }, [onlineRandevu, siniflarModule, canAccess])
 
   const showDemoLimits =
     companyId !== null && companyId !== undefined && companyId === DEMO_COMPANY_ID

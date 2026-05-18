@@ -25,6 +25,8 @@ import { NotificationSection } from "@/components/shared/NotificationSection"
 import { sendTestSmsAction } from "@/lib/sms-actions"
 import { DateInput } from "@/components/shared/DateInput"
 import { MeasurementsTab } from "@/components/customer/MeasurementsTab"
+import { CustomerPortalLink } from "@/components/customer/CustomerPortalLink"
+import { CustomerCommLogTab } from "@/components/customer/CustomerCommLogTab"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 type Customer = {
@@ -33,6 +35,7 @@ type Customer = {
   language: string; city: string | null; district: string | null
   address: string | null; sms_consent: boolean; email_consent: boolean
   whatsapp_consent: boolean; created_at: string
+  portal_token: string | null
 }
 type Appointment = {
   id: string; appointment_date: string; start_time: string; end_time: string
@@ -54,6 +57,18 @@ type CustomerCredit = {
   services: { name: string } | null
 }
 type DbService  = { id: string; name: string; price: number }
+type ProductSaleRow = {
+  id: string
+  sold_at: string | null
+  total_amount: number
+  discount: number | null
+  payment_method: string | null
+  product_sale_items: {
+    quantity: number
+    unit_price: number
+    products: { name: string } | null
+  }[]
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const RANDEVU_PAGE_SIZE = 5
@@ -272,7 +287,9 @@ const TABS = [
   { id: "siniflar",  label: "Sınıflar",            icon: "🎓" },
   { id: "randevular",label: "Randevular",          icon: "📅" },
   { id: "krediler",  label: "Krediler",            icon: "💳" },
+  { id: "urunler",   label: "Ürün Satışları",      icon: "🛒" },
   { id: "olcumler",  label: "Ölçümler",            icon: "📏" },
+  { id: "mesajlar",  label: "Mesaj geçmişi",       icon: "💬" },
 ]
 
 // ── Kredi Satışı Modal ─────────────────────────────────────────────────────
@@ -419,6 +436,7 @@ export default function MusteriDetailPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [pkgs, setPkgs]                 = useState<CustomerPackage[]>([])
   const [credits, setCredits]           = useState<CustomerCredit[]>([])
+  const [productSales, setProductSales] = useState<ProductSaleRow[]>([])
   const [services, setServices]         = useState<DbService[]>([])
   const [showKrediModal, setShowKrediModal] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
@@ -487,6 +505,17 @@ export default function MusteriDetailPage() {
     setPkgs((data as unknown as CustomerPackage[]) || [])
   }, [id])
 
+  const fetchProductSales = useCallback(async () => {
+    const { data } = await supabase
+      .from("product_sales")
+      .select(
+        "id, sold_at, total_amount, discount, payment_method, product_sale_items(quantity, unit_price, products(name))"
+      )
+      .eq("customer_id", id)
+      .order("sold_at", { ascending: false })
+    setProductSales((data as unknown as ProductSaleRow[]) || [])
+  }, [id])
+
   const fetchCredits = useCallback(async () => {
     const { data } = await supabase.from("customer_credits")
       .select("id,start_date,end_date,total_amount,total_paid,credit_count,status,discount_amount,services(name)")
@@ -498,8 +527,9 @@ export default function MusteriDetailPage() {
     fetchAppointments()
     fetchPackages()
     fetchCredits()
+    fetchProductSales()
     supabase.from("services").select("id,name,price").order("name").then(({ data }) => setServices(data || []))
-  }, [fetchAppointments, fetchPackages, fetchCredits])
+  }, [fetchAppointments, fetchPackages, fetchCredits, fetchProductSales])
 
   const todayStr = format(new Date(), "yyyy-MM-dd")
 
@@ -670,6 +700,11 @@ export default function MusteriDetailPage() {
         {/* ── Müşteri Bilgileri ── */}
         {tab === "bilgiler" && (
           <div className="p-6 max-w-3xl">
+            <CustomerPortalLink
+              customerId={id}
+              portalToken={customer.portal_token ?? null}
+              onTokenReady={(t) => setCustomer((c) => (c ? { ...c, portal_token: t } : c))}
+            />
             <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
               {[
                 { label: "Müşteri Adı Soyadı", icon: "👤", value: customer.full_name },
@@ -941,6 +976,50 @@ export default function MusteriDetailPage() {
             )}
           </div>
         )}
+
+        {/* ── Ürün satışları ── */}
+        {tab === "urunler" && (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100">
+              <h3 className="font-medium text-slate-800">Ürün satın alımları</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Müşteriye kayıtlı ürün satışları</p>
+                                    </div>
+            {productSales.length === 0 ? (
+              <p className="py-12 text-center text-sm text-slate-500">Henüz ürün satışı yok.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-500">
+                  <tr>
+                    {["Tarih", "Ürünler", "Tutar", "Ödeme"].map((h) => (
+                      <th key={h} className="text-left px-5 py-2 font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {productSales.map((sale) => {
+                    const items = sale.product_sale_items || []
+                    const names = items
+                      .map((it) => `${it.products?.name || "Ürün"} × ${it.quantity}`)
+                      .join(", ")
+                    const sold = sale.sold_at
+                      ? format(parseISO(sale.sold_at.slice(0, 10)), "dd.MM.yyyy")
+                      : "—"
+                    return (
+                      <tr key={sale.id} className="border-t border-slate-100">
+                        <td className="px-5 py-3 text-slate-700">{sold}</td>
+                        <td className="px-5 py-3 text-slate-800">{names || "—"}</td>
+                        <td className="px-5 py-3 font-semibold tabular-nums">{fmtTry(Number(sale.total_amount))}</td>
+                        <td className="px-5 py-3 text-slate-600">{sale.payment_method || "—"}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {tab === "mesajlar" && <CustomerCommLogTab customerId={id} />}
 
         {/* ── Ölçümler ── */}
         {tab === "olcumler" && (

@@ -19,6 +19,12 @@ import { supabaseData as supabase } from "@/lib/supabase-data"
 import { DEMO_COMPANY_ID, useCompany } from "@/hooks/useCompany"
 import { mapUiPaymentToPaymentsDbMethod } from "@/lib/finance/payment-method-map"
 import { recordIncomeFromPackageInstallmentPayment } from "@/lib/finance/integration"
+import { PrintableDocumentDialog } from "@/components/documents/PrintableDocumentDialog"
+import { usePrintableReceipt } from "@/hooks/usePrintableReceipt"
+import {
+  buildPaymentReceiptBody,
+  mapPaymentMethodLabel,
+} from "@/lib/documents/receipt-types"
 
 function round2(n: number) {
   return Math.round(n * 100) / 100
@@ -76,6 +82,7 @@ export function PackageOdemeSheet(props: Props) {
   } = props
   const { companyId } = useCompany()
   const effectiveCompanyId = companyId || DEMO_COMPANY_ID
+  const { receiptOpen, setReceiptOpen, receiptPayload, openReceipt } = usePrintableReceipt()
 
   const remaining = Math.max(0, round2(Number(totalPrice) - Number(totalPaid)))
 
@@ -193,10 +200,28 @@ export function PackageOdemeSheet(props: Props) {
     onSaved()
     if (!finErr) {
       onOpenChange(false)
+      openReceipt({
+        title: "Paket Ödeme Makbuzu",
+        subtitle: packageName,
+        customerName,
+        referenceNo: customerPackageId.slice(0, 8).toUpperCase(),
+        lineItems: [
+          { label: "Paket", value: packageName },
+          { label: "Ödeme tarihi", value: format(parseISO(payDate), "dd.MM.yyyy") },
+        ],
+        totalAmount: fmtTry(pay),
+        paymentMethod: mapPaymentMethodLabel(method),
+        defaultBody: buildPaymentReceiptBody(
+          customerName,
+          fmtTry(pay),
+          `"${packageName}" paketi taksit ödemesi`
+        ),
+      })
     }
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex w-full flex-col overflow-hidden p-0 sm:max-w-md">
         <SheetHeader className="border-b border-slate-100 px-6 pb-4 pt-6 pr-12 text-left">
@@ -333,5 +358,12 @@ export function PackageOdemeSheet(props: Props) {
         </SheetFooter>
       </SheetContent>
     </Sheet>
+    <PrintableDocumentDialog
+      open={receiptOpen}
+      onOpenChange={setReceiptOpen}
+      companyId={effectiveCompanyId}
+      payload={receiptPayload}
+    />
+    </>
   )
 }

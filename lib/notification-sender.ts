@@ -14,6 +14,7 @@ import { sendVerimorSms } from "@/lib/verimor-sms"
 import { sendWhatsappText } from "@/lib/whatsapp"
 import { sendEmail } from "@/lib/email"
 import { canSendNotification } from "@/lib/notification-preferences"
+import { logCustomerCommunication } from "@/lib/customer-communication"
 import {
   NOTIFICATION_TEMPLATES,
   applyTemplatePreview,
@@ -221,6 +222,27 @@ export async function sendNotification(
 
   const supabase = getSupabaseAdmin()
   const promises: Promise<void>[] = []
+  const smsText = resolveText(template.defaultSms, placeholders)
+  const emailText = resolveText(template.defaultEmail, placeholders)
+  const waText = resolveText(template.defaultWhatsapp, placeholders)
+
+  async function logChannel(
+    channel: "sms" | "email" | "whatsapp",
+    body: string,
+    ok: boolean,
+    err?: string
+  ) {
+    if (!customerId || !body.trim()) return
+    await logCustomerCommunication({
+      companyId,
+      customerId,
+      channel,
+      messageBody: body,
+      templateKey,
+      status: ok ? "sent" : "failed",
+      errorMessage: err ?? null,
+    })
+  }
 
   // ── SMS ──
   if (customerPhone && customerPhone.length >= 10) {
@@ -228,21 +250,30 @@ export async function sendNotification(
       (async () => {
         try {
           const tplEnabled = await isTemplateEnabled(companyId, templateKey, "sms")
-          if (!tplEnabled) { result.sms = { ok: false, error: "template_disabled" }; return }
+          if (!tplEnabled) {
+            result.sms = { ok: false, error: "template_disabled" }
+            await logChannel("sms", smsText, false, "template_disabled")
+            return
+          }
 
           if (customerId) {
             const allowed = await canSendNotification(supabase, customerId, companyId, "sms")
-            if (!allowed) { result.sms = { ok: false, error: "customer_opted_out" }; return }
+            if (!allowed) {
+              result.sms = { ok: false, error: "customer_opted_out" }
+              await logChannel("sms", smsText, false, "customer_opted_out")
+              return
+            }
           }
 
-          const text = resolveText(template.defaultSms, placeholders)
           const phone = customerPhone.replace(/\+/g, "")
-          const smsResult = await sendVerimorSms({ dest: phone, msg: text })
+          const smsResult = await sendVerimorSms({ dest: phone, msg: smsText })
           result.sms = smsResult.ok
             ? { ok: true }
             : { ok: false, error: smsResult.ok ? undefined : smsResult.errorCode }
+          await logChannel("sms", smsText, result.sms.ok, result.sms.error)
         } catch (err) {
           result.sms = { ok: false, error: err instanceof Error ? err.message : "sms_error" }
+          await logChannel("sms", smsText, false, result.sms.error)
         }
       })()
     )
@@ -261,7 +292,7 @@ export async function sendNotification(
             if (!allowed) { result.email = { ok: false, error: "customer_opted_out" }; return }
           }
 
-          const bodyText = resolveText(template.defaultEmail, placeholders)
+          const bodyText = emailText
           const companyName = placeholders.company_company_name || companyRow?.name || "aSistan"
           const companyPhone = placeholders.company_fullphone || companyRow?.phone || ""
           const companyWebsite = placeholders.company_website || companyRow?.website || ""
@@ -277,8 +308,10 @@ export async function sendNotification(
           result.email = emailResult.ok
             ? { ok: true }
             : { ok: false, error: emailResult.error }
+          await logChannel("email", bodyText, result.email.ok, result.email.error)
         } catch (err) {
           result.email = { ok: false, error: err instanceof Error ? err.message : "email_error" }
+          await logChannel("email", emailText, false, result.email.error)
         }
       })()
     )
@@ -297,13 +330,14 @@ export async function sendNotification(
             if (!allowed) { result.whatsapp = { ok: false, error: "customer_opted_out" }; return }
           }
 
-          const text = resolveText(template.defaultWhatsapp, placeholders)
-          const waResult = await sendWhatsappText(customerPhone, text)
+          const waResult = await sendWhatsappText(customerPhone, waText)
           result.whatsapp = waResult.ok
             ? { ok: true }
             : { ok: false, error: waResult.ok ? undefined : waResult.error }
+          await logChannel("whatsapp", waText, result.whatsapp.ok, result.whatsapp.error)
         } catch (err) {
           result.whatsapp = { ok: false, error: err instanceof Error ? err.message : "whatsapp_error" }
+          await logChannel("whatsapp", waText, false, result.whatsapp.error)
         }
       })()
     )

@@ -17,6 +17,7 @@ import {
   Server,
   Settings,
   Shield,
+  Tags,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase-client"
@@ -33,6 +34,7 @@ const adminNavItems: AdminNavItem[] = [
   { label: "Şirketler", href: "/admin/companies", icon: <Store className="h-4 w-4" /> },
   { label: "Kullanıcılar", href: "/admin/users", icon: <Users className="h-4 w-4" /> },
   { label: "Abonelikler", href: "/admin/subscriptions", icon: <CreditCard className="h-4 w-4" /> },
+  { label: "Fiyatlandırma", href: "/admin/pricing", icon: <Tags className="h-4 w-4" /> },
   { label: "Destek Talepleri", href: "/admin/tickets", icon: <LifeBuoy className="h-4 w-4" /> },
   { label: "Gelir & Ödemeler", href: "/admin/revenue", icon: <DollarSign className="h-4 w-4" /> },
   { label: "SMS & Bildirimler", href: "/admin/notifications", icon: <MessageSquare className="h-4 w-4" /> },

@@ -2,16 +2,20 @@
 
 import { useEffect, useState, useRef, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2, CreditCard, Building2, Copy, CheckCircle2 } from "lucide-react"
 import { useCompany } from "@/hooks/useCompany"
+import { useCart } from "@/contexts/CartContext"
 import { supabase } from "@/lib/supabase-client"
+import { formatTry } from "@/lib/catalog/defaults"
 
 function OdemeContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { companyId } = useCompany()
+  const { items, subtotal, vatAmount, total, itemCount } = useCart()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [formHtml, setFormHtml] = useState("")
@@ -19,26 +23,19 @@ function OdemeContent() {
   const [copied, setCopied] = useState(false)
   const formRef = useRef<HTMLDivElement>(null)
 
-  const type = searchParams.get("type") as string
+  const source = searchParams.get("source")
+  const type = searchParams.get("type")
   const planId = searchParams.get("planId") || undefined
   const packageId = searchParams.get("packageId") || undefined
+  const billing = (searchParams.get("billing") as "monthly" | "yearly") || undefined
 
-  const priceMap: Record<string, string> = {
-    asistan: "750", asistan_plus: "1.500", asistan_pro: "2.100",
-    sms_500: "275", sms_1000: "500", sms_3000: "1.350",
-    wp_500: "275", wp_1000: "500", wp_3000: "1.350",
-    user_1: "2.592", user_2: "5.184",
-  }
-  const nameMap: Record<string, string> = {
-    asistan: "ASiSTAN (Tek Kullanıcı)", asistan_plus: "ASiSTAN +", asistan_pro: "ASiSTAN PRO",
-    sms_500: "500 SMS Kredisi", sms_1000: "1000 SMS Kredisi", sms_3000: "3000 SMS Kredisi",
-    wp_500: "500 WhatsApp Kredisi", wp_1000: "1000 WhatsApp Kredisi", wp_3000: "3000 WhatsApp Kredisi",
-    user_1: "1 Ek Kullanıcı", user_2: "2 Ek Kullanıcı",
-  }
+  const isCartCheckout = source === "cart" || itemCount > 0
 
-  const itemKey = planId || packageId || ""
-  const displayPrice = priceMap[itemKey] || "—"
-  const displayName = nameMap[itemKey] || "Paket"
+  useEffect(() => {
+    if (!isCartCheckout && !type) {
+      router.push("/hesabim")
+    }
+  }, [isCartCheckout, type, router])
 
   async function startCheckout() {
     setLoading(true)
@@ -51,10 +48,15 @@ function OdemeContent() {
       return
     }
 
+    const body =
+      isCartCheckout && items.length > 0
+        ? { items, userId: user.id, companyId }
+        : { type, planId, packageId, billing, userId: user.id, companyId }
+
     const res = await fetch("/api/payment/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, planId, packageId, userId: user.id, companyId }),
+      body: JSON.stringify(body),
     })
 
     const data = await res.json()
@@ -86,10 +88,26 @@ function OdemeContent() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (!type) {
-    router.push("/hesabim")
-    return null
+  if (!isCartCheckout && !type) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    )
   }
+
+  if (isCartCheckout && items.length === 0) {
+    return (
+      <div className="container mx-auto max-w-2xl py-8 px-4 text-center space-y-4">
+        <p className="text-slate-600">Sepetiniz boş.</p>
+        <Button asChild>
+          <Link href="/hesabim/plan-sec">Alışverişe Başla</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  const displayTotal = isCartCheckout ? total : subtotal
 
   return (
     <div className="container mx-auto max-w-2xl py-8 px-4">
@@ -99,11 +117,39 @@ function OdemeContent() {
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Sipariş Özeti</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">{displayName}</span>
-            <span className="text-xl font-bold">{displayPrice} ₺</span>
-          </div>
+        <CardContent className="space-y-3">
+          {isCartCheckout ? (
+            <>
+              {items.map((item) => (
+                <div key={item.lineId} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {item.title}
+                    {item.quantity > 1 ? ` × ${item.quantity}` : ""}
+                  </span>
+                  <span className="font-medium">{formatTry(item.unitPrice * item.quantity)}</span>
+                </div>
+              ))}
+              <div className="border-t pt-2 space-y-1">
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Ara Toplam</span>
+                  <span>{formatTry(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>KDV (%20)</span>
+                  <span>{formatTry(vatAmount)}</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold">
+                  <span>Toplam</span>
+                  <span>{formatTry(total)}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">{planId || packageId}</span>
+              <span className="text-xl font-bold">—</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -136,8 +182,12 @@ function OdemeContent() {
                 </p>
                 {error && <p className="text-sm text-red-600">{error}</p>}
                 <Button onClick={startCheckout} disabled={loading} className="w-full">
-                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
-                  {loading ? "Yükleniyor..." : `${displayPrice} ₺ Öde`}
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <CreditCard className="w-4 h-4 mr-2" />
+                  )}
+                  {loading ? "Yükleniyor..." : `${formatTry(displayTotal)} Öde`}
                 </Button>
               </div>
             )}
@@ -159,20 +209,34 @@ function OdemeContent() {
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs">TR12 0001 0012 3456 7890 1234 56</span>
                   <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCopyIban}>
-                    {copied ? <CheckCircle2 className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                    {copied ? (
+                      <CheckCircle2 className="w-3 h-3 text-green-600" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
                   </Button>
                 </div>
               </div>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
               <p className="font-medium mb-1">Açıklama kısmına yazınız:</p>
-              <p className="font-mono">{companyId?.slice(0, 8)} - {displayName}</p>
+              <p className="font-mono">
+                {companyId?.slice(0, 8)} - {isCartCheckout ? "Sepet" : planId || packageId}
+              </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Havale/EFT sonrası aktivasyon 1 iş günü içinde yapılır. Destek için destek sayfasından ticket açabilirsiniz.
+              Havale/EFT sonrası aktivasyon 1 iş günü içinde yapılır.
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {isCartCheckout && (
+        <p className="text-center mt-4 text-sm">
+          <Link href="/sepet" className="text-orange-600 hover:underline">
+            Sepete dön
+          </Link>
+        </p>
       )}
     </div>
   )
@@ -180,7 +244,13 @@ function OdemeContent() {
 
 export default function OdemePage() {
   return (
-    <Suspense fallback={<div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-20">
+          <Loader2 className="w-6 h-6 animate-spin" />
+        </div>
+      }
+    >
       <OdemeContent />
     </Suspense>
   )

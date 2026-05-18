@@ -8,7 +8,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Telefon numarası gerekli." }, { status: 400 })
     }
 
-    const result = await sendOtp(phone)
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      "unknown"
+    const result = await sendOtp(phone, ip)
     if (result.ok) {
       return NextResponse.json({ ok: true })
     }

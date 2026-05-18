@@ -12,6 +12,13 @@ import { DEMO_COMPANY_ID, useCompany } from "@/hooks/useCompany"
 import { recordIncomeFromAppointmentPayment } from "@/lib/finance/integration"
 import { mapUiPaymentToPaymentsDbMethod } from "@/lib/finance/payment-method-map"
 import { cn } from "@/lib/utils"
+import { PrintableDocumentDialog } from "@/components/documents/PrintableDocumentDialog"
+import { usePrintableReceipt } from "@/hooks/usePrintableReceipt"
+import {
+  buildPaymentReceiptBody,
+  mapPaymentMethodLabel,
+  type PrintableDocumentPayload,
+} from "@/lib/documents/receipt-types"
 
 type SheetMode = "pay" | "history"
 
@@ -92,6 +99,7 @@ export function AppointmentOdemeSheet(props: Props) {
   const [historyOpen, setHistoryOpen] = useState(true)
 
   const effectiveCompanyId = companyId || DEMO_COMPANY_ID
+  const { receiptOpen, setReceiptOpen, receiptPayload, openReceipt } = usePrintableReceipt()
 
   const paidDb = useMemo(
     () => round2(payments.reduce((s, p) => s + (Number(p.amount) || 0), 0)),
@@ -251,10 +259,31 @@ export function AppointmentOdemeSheet(props: Props) {
           return
         }
       }
+      const totalPaid = round2(pending.reduce((s, l) => s + l.amount, 0))
+      const methods = [...new Set(pending.map((l) => mapPaymentMethodLabel(l.method)))].join(", ")
+      const savedLines = [...pending]
       setPending([])
       await loadPayments()
       onSaved()
       onOpenChange(false)
+      const payload: PrintableDocumentPayload = {
+        title: "Ödeme Makbuzu",
+        subtitle: serviceLabel,
+        customerName,
+        referenceNo: appointmentId.slice(0, 8).toUpperCase(),
+        lineItems: savedLines.map((l, i) => ({
+          label: `Ödeme ${i + 1} (${format(new Date(l.payDate + "T12:00:00"), "dd.MM.yyyy")})`,
+          value: fmtTry(l.amount),
+        })),
+        totalAmount: fmtTry(totalPaid),
+        paymentMethod: methods,
+        defaultBody: buildPaymentReceiptBody(
+          customerName,
+          fmtTry(totalPaid),
+          `${serviceLabel} randevusu`
+        ),
+      }
+      openReceipt(payload)
     } finally {
       setSaving(false)
     }
@@ -266,6 +295,7 @@ export function AppointmentOdemeSheet(props: Props) {
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         className="flex w-full flex-col overflow-hidden border-l border-neutral-200 bg-white p-0 sm:max-w-md"
@@ -591,5 +621,12 @@ export function AppointmentOdemeSheet(props: Props) {
         </SheetFooter>
       </SheetContent>
     </Sheet>
+    <PrintableDocumentDialog
+      open={receiptOpen}
+      onOpenChange={setReceiptOpen}
+      companyId={effectiveCompanyId}
+      payload={receiptPayload}
+    />
+  </>
   )
 }

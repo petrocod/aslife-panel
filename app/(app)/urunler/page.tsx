@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils"
 import { supabaseData as supabase } from "@/lib/supabase-data"
 import { useCompany, DEMO_COMPANY_ID } from "@/hooks/useCompany"
 import { recordIncomeFromProductSale } from "@/lib/finance/integration"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import { PrintableDocumentDialog } from "@/components/documents/PrintableDocumentDialog"
+import { usePrintableReceipt } from "@/hooks/usePrintableReceipt"
+import { buildProductSaleBody, mapPaymentMethodLabel } from "@/lib/documents/receipt-types"
 
 type Product = {
   id: string
@@ -42,6 +47,7 @@ export default function UrunlerPage() {
   const [loading, setLoading] = useState(true)
   const [stockFilter, setStockFilter] = useState<string>("all")
   const [showSale, setShowSale] = useState<Product | null>(null)
+  const [customers, setCustomers] = useState<{ id: string; full_name: string }[]>([])
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -55,6 +61,15 @@ export default function UrunlerPage() {
   }, [cid])
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
+
+  useEffect(() => {
+    supabase
+      .from("customers")
+      .select("id, full_name")
+      .eq("company_id", cid)
+      .order("full_name")
+      .then(({ data }) => setCustomers((data as { id: string; full_name: string }[]) || []))
+  }, [cid])
 
   const filtered = products.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -229,6 +244,7 @@ export default function UrunlerPage() {
         <SaleModal
           product={showSale}
           companyId={cid}
+          customers={customers}
           onClose={() => setShowSale(null)}
           onSaved={() => { setShowSale(null); fetchProducts() }}
         />
@@ -238,15 +254,21 @@ export default function UrunlerPage() {
 }
 
 function SaleModal({
-  product, companyId, onClose, onSaved,
+  product, companyId, customers, onClose, onSaved,
 }: {
-  product: Product; companyId: string; onClose: () => void; onSaved: () => void
+  product: Product
+  companyId: string
+  customers: { id: string; full_name: string }[]
+  onClose: () => void
+  onSaved: () => void
 }) {
   const [qty, setQty] = useState(1)
   const [discount, setDiscount] = useState(0)
   const [method, setMethod] = useState("cash")
+  const [customerId, setCustomerId] = useState("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+  const { receiptOpen, setReceiptOpen, receiptPayload, openReceipt } = usePrintableReceipt()
 
   const unitPrice = Number(product.price)
   const total = Math.max(0, unitPrice * qty - discount)
@@ -258,6 +280,7 @@ function SaleModal({
 
     const { data: sale, error: e1 } = await supabase.from("product_sales").insert({
       company_id: companyId,
+      customer_id: customerId || null,
       total_amount: total,
       discount,
       payment_method: method,
@@ -289,7 +312,26 @@ function SaleModal({
     })
 
     setSaving(false)
+    const custName = customers.find((c) => c.id === customerId)?.full_name || ""
     onSaved()
+    openReceipt({
+      title: "Ürün Satış Makbuzu",
+      subtitle: product.name,
+      customerName: custName || undefined,
+      referenceNo: sale.id.slice(0, 8).toUpperCase(),
+      lineItems: [
+        { label: "Ürün", value: product.name },
+        { label: "Adet", value: String(qty) },
+        { label: "Birim fiyat", value: `₺${unitPrice.toFixed(2)}` },
+        ...(discount > 0 ? [{ label: "İndirim", value: `-₺${discount.toFixed(2)}` }] : []),
+      ],
+      totalAmount: `₺${total.toFixed(2)}`,
+      paymentMethod: mapPaymentMethodLabel(method),
+      defaultBody: buildProductSaleBody(
+        custName,
+        `${product.name} × ${qty} — Toplam ₺${total.toFixed(2)}`
+      ),
+    })
   }
 
   return (
@@ -302,6 +344,19 @@ function SaleModal({
         </div>
         <div className="px-6 py-5 space-y-4">
           {error && <p className="text-xs text-red-600 bg-red-50 p-2 rounded">{error}</p>}
+
+          <div>
+            <Label className="text-xs font-medium text-slate-600">Müşteri (isteğe bağlı)</Label>
+            <Select value={customerId || "__none__"} onValueChange={(v) => setCustomerId(v === "__none__" ? "" : v)}>
+              <SelectTrigger className="mt-1"><SelectValue placeholder="Müşteri seçin" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— Müşteri yok —</SelectItem>
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.full_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -382,6 +437,12 @@ function SaleModal({
           </Button>
         </div>
       </div>
+      <PrintableDocumentDialog
+        open={receiptOpen}
+        onOpenChange={setReceiptOpen}
+        companyId={companyId}
+        payload={receiptPayload}
+      />
     </>
   )
 }

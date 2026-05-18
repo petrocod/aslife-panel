@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { verifyCron, verifyUserBearer } from "@/lib/sms-route-auth"
+import { verifyUserBearer } from "@/lib/sms-route-auth"
 
 async function verifyAdmin(req: NextRequest): Promise<boolean> {
-  if (verifyCron(req)) return true
-
   const bearer = await verifyUserBearer(req)
   if (!bearer.ok) return false
 

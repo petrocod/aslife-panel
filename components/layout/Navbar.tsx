@@ -18,6 +18,7 @@ import { getTemplateById } from "@/lib/musteri-bildirimleri"
 import { ASISTAN_TAB_COPY, normalizeAsistanTab } from "@/lib/asistan-tabs"
 import { useSubscription } from "@/hooks/useSubscription"
 import { useCompany } from "@/hooks/useCompany"
+import { useCart } from "@/contexts/CartContext"
 
 const DYNAMIC_PATTERNS: { pattern: RegExp; title: string; description: string }[] = [
   { pattern: /^\/hizmetler\/paketler\/[^/]+\/duzenle$/, title: "Paket Düzenle", description: "Paket bilgilerini güncelleyebilirsiniz." },
@@ -71,6 +72,7 @@ const pageInfo: Record<string, { title: string; description: string }> = {
   "/hesabim/gecmis-odemeler": { title: "Geçmiş Ödemeler", description: "Geçmiş ödeme kayıtlarınızı buradan görüntüleyebilirsiniz." },
   "/hesabim/ek-paketler": { title: "Ek Paketler", description: "Planınıza ek paket ekleyebilirsiniz." },
   "/hesabim/plan-sec": { title: "Plan Seç", description: "Size uygun planı seçin." },
+  "/sepet": { title: "Sepet", description: "Sepetinizdeki ürünleri görüntüleyin ve ödemeyi tamamlayın." },
   "/destek": { title: "Destek", description: "" },
   "/gizlilik": { title: "Gizlilik Politikası", description: "" },
 }
@@ -234,6 +236,7 @@ function NavbarInner() {
   const [userEmail, setUserEmail] = useState("")
   const [userInitials, setUserInitials] = useState("U")
   const sub = useSubscription()
+  const { itemCount } = useCart()
 
   useEffect(() => {
     const mCustomer = pathname.match(/^\/musteriler\/([^/]+)/)
@@ -417,9 +420,11 @@ function NavbarInner() {
 
           <Link href="/sepet" className="relative text-muted-foreground hover:text-foreground shrink-0" aria-label="Sepet">
             <ShoppingCart className="h-5 w-5" />
-            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
-              0
-            </span>
+            {itemCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] rounded-full min-w-4 h-4 px-0.5 flex items-center justify-center">
+                {itemCount > 9 ? "9+" : itemCount}
+              </span>
+            )}
           </Link>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { retrieveCheckoutForm } from "@/lib/iyzico"
 import { recordExpenseFromPlatformPurchase } from "@/lib/finance/integration"
+import { cartItemsFromMetadata, describeCartItems, fulfillCartItems } from "@/lib/payment/fulfill"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,65 +40,35 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", txn.id)
 
-      const meta = txn.metadata as { planId?: string; packageId?: string } | null
-
-      if (txn.type === "subscription" && meta?.planId) {
-        await supabaseAdmin
-          .from("company_subscriptions")
-          .update({
-            plan_id: meta.planId,
-            status: "active",
-            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("company_id", txn.company_id)
-      } else if (txn.type === "sms_package" && meta?.packageId) {
-        const creditMap: Record<string, number> = {
-          sms_500: 500,
-          sms_1000: 1000,
-          sms_3000: 3000,
-        }
-        const credits = creditMap[meta.packageId] || 500
-        await supabaseAdmin.from("sms_packages").insert({
-          company_id: txn.company_id,
-          credits_total: credits,
-          credits_used: 0,
-          purchased_at: new Date().toISOString(),
-        })
-      } else if (txn.type === "whatsapp_package" && meta?.packageId) {
-        const creditMap: Record<string, number> = {
-          wp_500: 500,
-          wp_1000: 1000,
-          wp_3000: 3000,
-        }
-        const credits = creditMap[meta.packageId] || 500
-        await supabaseAdmin.from("whatsapp_packages").insert({
-          company_id: txn.company_id,
-          credits_total: credits,
-          credits_used: 0,
-          purchased_at: new Date().toISOString(),
-        })
+      const meta = txn.metadata as Record<string, unknown> | null
+      const cartItems = cartItemsFromMetadata(meta)
+      if (cartItems.length > 0) {
+        await fulfillCartItems(supabaseAdmin, txn.company_id, cartItems)
       }
 
-      // Record as expense in financial reports
       const descMap: Record<string, string> = {
-        subscription: `Abonelik ödemesi: ${meta?.planId || ""}`,
-        sms_package: `SMS paketi: ${meta?.packageId || ""}`,
-        whatsapp_package: `WhatsApp paketi: ${meta?.packageId || ""}`,
-        user_package: `Kullanıcı paketi: ${meta?.packageId || ""}`,
+        subscription: `Abonelik ödemesi`,
+        sms_package: `SMS paketi`,
+        whatsapp_package: `WhatsApp paketi`,
+        user_package: `Kullanıcı paketi`,
+        cart: `Sepet ödemesi`,
       }
+      const paymentDesc =
+        cartItems.length > 0
+          ? `${descMap[txn.type] || "Platform ödemesi"}: ${describeCartItems(cartItems)}`
+          : descMap[txn.type] || "Platform ödemesi"
       try {
         await recordExpenseFromPlatformPurchase(supabaseAdmin, {
           companyId: txn.company_id,
           transactionId: txn.id,
           amount: parseFloat(txn.amount),
           type: txn.type,
-          description: descMap[txn.type] || "Platform ödemesi",
+          description: paymentDesc,
         })
       } catch { /* non-critical */ }
 
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
-      return NextResponse.redirect(`${baseUrl}/hesabim?payment=success`)
+      return NextResponse.redirect(`${baseUrl}/sepet?payment=success&cleared=1`)
     }
 
     await supabaseAdmin

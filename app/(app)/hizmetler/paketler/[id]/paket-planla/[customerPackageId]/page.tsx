@@ -38,6 +38,8 @@ import { supabaseData as supabase } from "@/lib/supabase-data"
 import { useCompany, DEMO_COMPANY_ID } from "@/hooks/useCompany"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { hasAppointmentConflicts, type AppointmentSlot } from "@/lib/appointments/conflict-check"
+import { ConflictWarnDialog } from "@/components/appointments/ConflictWarnDialog"
 
 /** Takvim randevu formu ile aynı 15 dk aralıklar */
 const TIME_SELECT_OPTIONS = Array.from({ length: 24 * 4 }, (_, i) => {
@@ -229,6 +231,8 @@ export default function PaketPlanlamaPage() {
   const [days, setDays] = useState<Set<number>>(new Set([2, 4]))
   const [plannedRows, setPlannedRows] = useState<PlannedAppointmentRow[]>([])
   const [saving, setSaving] = useState(false)
+  const [showConflictWarn, setShowConflictWarn] = useState(false)
+  const [pendingGoCalendar, setPendingGoCalendar] = useState(false)
   const planFormDefaultsRef = useRef<PlanFormDefaults | null>(null)
   const [locations, setLocations] = useState<{ id: string; name: string }[]>([])
 
@@ -493,7 +497,17 @@ export default function PaketPlanlamaPage() {
     setPlannedRows(datesToPlanRows(pts, durMin, employeeId))
   }
 
-  async function persistAndRedirect(goCalendar: boolean) {
+  function plannedRowsToSlots(): AppointmentSlot[] {
+    return plannedRows.map((row) => ({
+      date: row.dateIso,
+      start: row.startHm,
+      end: row.endHm,
+      employeeId: row.employeeId,
+      locationId: row.locationId,
+    }))
+  }
+
+  async function requestPersist(goCalendar: boolean) {
     if (!primaryService?.id || plannedRows.length === 0) {
       setErr(
         plannedRows.length === 0
@@ -507,6 +521,16 @@ export default function PaketPlanlamaPage() {
       return
     }
 
+    const conflict = await hasAppointmentConflicts(supabase, plannedRowsToSlots())
+    if (conflict) {
+      setPendingGoCalendar(goCalendar)
+      setShowConflictWarn(true)
+      return
+    }
+    await persistAndRedirect(goCalendar)
+  }
+
+  async function persistAndRedirect(goCalendar: boolean) {
     setSaving(true)
     setErr(null)
 
@@ -994,7 +1018,7 @@ export default function PaketPlanlamaPage() {
               type="button"
               variant="secondary"
               disabled={saving || plannedRows.length === 0}
-              onClick={() => void persistAndRedirect(false)}
+              onClick={() => void requestPersist(false)}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Kaydet"}
             </Button>
@@ -1002,7 +1026,7 @@ export default function PaketPlanlamaPage() {
               type="button"
               className="bg-blue-600 hover:bg-blue-700"
               disabled={saving || plannedRows.length === 0}
-              onClick={() => void persistAndRedirect(true)}
+              onClick={() => void requestPersist(true)}
             >
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Kaydet ve Takvime ekle
@@ -1010,6 +1034,17 @@ export default function PaketPlanlamaPage() {
           </div>
         </div>
       </div>
+
+      <ConflictWarnDialog
+        open={showConflictWarn}
+        onOpenChange={setShowConflictWarn}
+        onCancel={() => setShowConflictWarn(false)}
+        onContinue={() => {
+          setShowConflictWarn(false)
+          void persistAndRedirect(pendingGoCalendar)
+        }}
+        message="Planlanan randevulardan biri veya daha fazlası mevcut bir randevu ile çakışıyor. Yine de kaydetmek istiyor musunuz?"
+      />
     </div>
   )
 }

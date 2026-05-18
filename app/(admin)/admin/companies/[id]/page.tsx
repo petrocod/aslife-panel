@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { formatDate, formatCurrency } from "@/lib/utils"
+import { useAdmin } from "@/hooks/useAdmin"
 import {
   ArrowLeft,
   Store,
@@ -76,6 +77,8 @@ export default function CompanyDetailPage() {
   const params = useParams()
   const router = useRouter()
   const companyId = params.id as string
+  const { adminRole } = useAdmin()
+  const [trialBusy, setTrialBusy] = useState(false)
 
   const [company, setCompany] = useState<CompanyDetail | null>(null)
   const [org, setOrg] = useState<OrgInfo | null>(null)
@@ -544,6 +547,52 @@ export default function CompanyDetailPage() {
                   Abonelik başlangıcı:{" "}
                   {formatDate(subscription.created_at, "dd.MM.yyyy HH:mm")}
                 </div>
+                {adminRole === "super_admin" && (
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={trialBusy}
+                      onClick={async () => {
+                        setTrialBusy(true)
+                        const token = await getToken()
+                        await fetch(`/api/admin/companies/${companyId}/trial`, {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({ enable: true, days: 14 }),
+                        })
+                        setTrialBusy(false)
+                        window.location.reload()
+                      }}
+                    >
+                      14 gün deneme aç
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={trialBusy}
+                      onClick={async () => {
+                        setTrialBusy(true)
+                        const token = await getToken()
+                        await fetch(`/api/admin/companies/${companyId}/trial`, {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({ enable: false }),
+                        })
+                        setTrialBusy(false)
+                        window.location.reload()
+                      }}
+                    >
+                      Denemeyi kapat
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
