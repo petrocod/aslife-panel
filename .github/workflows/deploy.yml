@@ -1,4 +1,4 @@
-# استقرار خودکار برای برندهای Seyahatmarket و Money Transfer Center
+# استقرار خودکار برای برندهای Aslife (aSistan)
 # Secrets مورد نیاز در GitHub → Settings → Secrets → Actions:
 #   DEPLOY_HOST      (IP یا hostname سرور)
 #   DEPLOY_USER      (مثلاً root یا deploy)
