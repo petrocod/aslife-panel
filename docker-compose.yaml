@@ -1,5 +1,4 @@
-# Hostinger Docker Manager — docker-compose.yaml (branch master)
-# env از پارامتر environment در API/MCP تزریق می‌شود (بدون env_file)
+# Hostinger Docker Manager — branch master (Traefik + asixtan.com)
 
 services:
   asistan-app:
@@ -8,8 +7,16 @@ services:
       dockerfile: Dockerfile
     container_name: asistan-app
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:3002:3000"
+    networks:
+      - default
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=root_default
+      - traefik.http.routers.asistan.rule=Host(`asixtan.com`) || Host(`www.asixtan.com`)
+      - traefik.http.routers.asistan.entrypoints=websecure
+      - traefik.http.routers.asistan.tls.certresolver=letsencrypt
+      - traefik.http.services.asistan.loadbalancer.server.port=3000
     healthcheck:
       test:
         [
@@ -20,3 +27,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+
+networks:
+  traefik:
+    external: true
+    name: root_default

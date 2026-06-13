@@ -1,6 +1,5 @@
-# aSistan — پروژه Docker جدا (Hostinger / VPS)
-# 1) .env.local را کنار این فایل بسازید (از env.docker.example)
-# 2) docker compose up -d --build
+# aSistan — Hostinger VPS (Traefik + asixtan.com)
+# env از Hostinger Docker Manager (پارامتر environment) تزریق می‌شود
 
 services:
   asistan-app:
@@ -9,10 +8,16 @@ services:
       dockerfile: Dockerfile
     container_name: asistan-app
     restart: unless-stopped
-    # env از Hostinger Docker Manager (پارامتر environment) تزریق می‌شود
-    # فقط localhost — از Traefik یا nginx جلو آن را expose کنید
-    ports:
-      - "127.0.0.1:3002:3000"
+    networks:
+      - default
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=root_default
+      - traefik.http.routers.asistan.rule=Host(`asixtan.com`) || Host(`www.asixtan.com`)
+      - traefik.http.routers.asistan.entrypoints=websecure
+      - traefik.http.routers.asistan.tls.certresolver=letsencrypt
+      - traefik.http.services.asistan.loadbalancer.server.port=3000
     healthcheck:
       test:
         [
@@ -22,4 +27,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 120s
+
+networks:
+  traefik:
+    external: true
+    name: root_default
