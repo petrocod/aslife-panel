@@ -9,11 +9,20 @@ function iyzicoErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-const iyzipay = new Iyzipay({
-  apiKey: process.env.IYZICO_API_KEY || "",
-  secretKey: process.env.IYZICO_SECRET_KEY || "",
-  uri: process.env.IYZICO_BASE_URL || "https://sandbox-api.iyzipay.com",
-})
+let iyzipayClient: Iyzipay | null = null
+
+function getIyzipay(): Iyzipay {
+  if (!iyzipayClient) {
+    const apiKey = process.env.IYZICO_API_KEY || ""
+    const secretKey = process.env.IYZICO_SECRET_KEY || ""
+    iyzipayClient = new Iyzipay({
+      apiKey,
+      secretKey,
+      uri: process.env.IYZICO_BASE_URL || "https://sandbox-api.iyzipay.com",
+    })
+  }
+  return iyzipayClient
+}
 
 export type CheckoutItem = {
   id: string
@@ -88,7 +97,7 @@ export function createCheckoutForm(
       })),
     }
 
-    iyzipay.checkoutFormInitialize.create(request, (err: unknown, result: unknown) => {
+    getIyzipay().checkoutFormInitialize.create(request, (err: unknown, result: unknown) => {
       if (err) {
         resolve({
           status: "failure",
@@ -112,7 +121,7 @@ export function retrieveCheckoutForm(
   token: string
 ): Promise<{ status: string; paymentId?: string; price?: number; paidPrice?: number; errorMessage?: string; conversationId?: string; basketId?: string }> {
   return new Promise((resolve) => {
-    iyzipay.checkoutForm.retrieve(
+    getIyzipay().checkoutForm.retrieve(
       { locale: Iyzipay.LOCALE.TR, token },
       (err: unknown, result: unknown) => {
         if (err) {
