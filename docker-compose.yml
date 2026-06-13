@@ -9,8 +9,7 @@ services:
       dockerfile: Dockerfile
     container_name: asistan-app
     restart: unless-stopped
-    env_file:
-      - .env.local
+    # env از Hostinger Docker Manager (پارامتر environment) تزریق می‌شود
     # فقط localhost — از Traefik یا nginx جلو آن را expose کنید
     ports:
       - "127.0.0.1:3002:3000"
