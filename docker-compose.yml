@@ -1,5 +1,5 @@
 # aSistan — Hostinger VPS (Traefik + asixtan.com)
-# build context از GitHub — فقط compose روی سرور کافی است
+# Traefik روی این VPS: شبکه web + certresolver mytlschallenge (مثل seyahatmarket)
 
 services:
   asistan-app:
@@ -18,13 +18,14 @@ services:
       - .env
     networks:
       - default
-      - traefik
+      - web
     labels:
       - traefik.enable=true
-      - traefik.docker.network=root_default
+      - traefik.docker.network=web
       - traefik.http.routers.asistan.rule=Host(`asixtan.com`) || Host(`www.asixtan.com`)
       - traefik.http.routers.asistan.entrypoints=websecure
-      - traefik.http.routers.asistan.tls.certresolver=letsencrypt
+      - traefik.http.routers.asistan.tls=true
+      - traefik.http.routers.asistan.tls.certresolver=mytlschallenge
       - traefik.http.services.asistan.loadbalancer.server.port=3000
     healthcheck:
       test:
@@ -38,6 +39,5 @@ services:
       start_period: 180s
 
 networks:
-  traefik:
+  web:
     external: true
-    name: root_default
