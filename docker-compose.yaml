@@ -1,10 +1,15 @@
-# Hostinger Docker Manager — branch master (Traefik + asixtan.com)
+# Hostinger Docker Manager — branch master
 
 services:
   asistan-app:
     build:
-      context: .
+      context: https://github.com/petrocod/aslife-panel.git#master
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL}
+        NEXT_PUBLIC_SALES_EMAIL: ${NEXT_PUBLIC_SALES_EMAIL}
     container_name: asistan-app
     restart: unless-stopped
     networks:
@@ -26,7 +31,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
+      start_period: 180s
 
 networks:
   traefik:
