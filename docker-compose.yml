@@ -1,0 +1,26 @@
+# aSistan — پروژه Docker جدا (Hostinger / VPS)
+# 1) .env.local را کنار این فایل بسازید (از env.docker.example)
+# 2) docker compose up -d --build
+
+services:
+  asistan-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: asistan-app
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    # فقط localhost — از Traefik یا nginx جلو آن را expose کنید
+    ports:
+      - "127.0.0.1:3002:3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

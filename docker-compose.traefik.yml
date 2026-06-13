@@ -1,0 +1,25 @@
+# Traefik Hostinger — بعد از «Traefik'i Dağıt» و تنظیم دامنه، این overlay را استفاده کنید:
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d --build
+#
+# ASISTAN_DOMAIN را در .env.local بگذارید: asistan.example.com
+# شبکه traefik روی Hostinger اغلب root_default است — در Docker Manager → root → Terminal:
+#   docker network ls | grep -i traefik
+
+services:
+  asistan-app:
+    ports: !reset []
+    networks:
+      - default
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=root_default
+      - traefik.http.routers.asistan.rule=Host(`${ASISTAN_DOMAIN}`)
+      - traefik.http.routers.asistan.entrypoints=websecure
+      - traefik.http.routers.asistan.tls.certresolver=letsencrypt
+      - traefik.http.services.asistan.loadbalancer.server.port=3000
+
+networks:
+  traefik:
+    external: true
+    name: root_default

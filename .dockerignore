@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+build
+.git
+.github
+.env
+.env.local
+.env*.local
+*.md
+docs
+supabase/.temp
+.DS_Store
+npm-debug.log*
