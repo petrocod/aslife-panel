@@ -4,7 +4,7 @@
 services:
   asistan-app:
     build:
-      context: https://github.com/petrocod/aslife-panel.git#master
+      context: .
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}

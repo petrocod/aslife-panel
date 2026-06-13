@@ -12,15 +12,25 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v git >/dev/null 2>&1; then
+  echo "Git not found. Install: apt install -y git" >&2
+  exit 1
+fi
+
 mkdir -p "$APP_DIR"
 cd "$APP_DIR"
+
+# Hostinger Docker Manager sometimes leaves only compose files (no source)
+if [ ! -f package.json ]; then
+  echo "Cleaning partial deploy (compose-only)..."
+  find "$APP_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+fi
 
 if [ -d .git ]; then
   git fetch origin "$BRANCH"
   git checkout "$BRANCH"
   git pull origin "$BRANCH"
 else
-  find "$APP_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
   git clone --branch "$BRANCH" --depth 1 "$REPO" .
 fi
 
@@ -40,12 +50,17 @@ IYZICO_API_KEY=4GrQqRplWyYvOjnkkYK3DowMeihO3uyy
 IYZICO_SECRET_KEY=zScwNVZBAibYAr1eidum61rMuKgpl1Pt
 IYZICO_BASE_URL=https://sandbox-api.iyzipay.com
 EOF
-  echo "Created .env — edit anon/service_role keys then re-run."
+  echo "Created .env — paste Supabase keys, then re-run this script."
   exit 1
 fi
 
-docker compose -f docker-compose.yml --env-file .env up -d --build
-docker compose ps
-curl -fsS http://127.0.0.1:3000/api/health || true
+echo "Building (5-10 min)..."
+docker compose -f docker-compose.yml --env-file .env up -d --build --remove-orphans
 
-echo "Done. Test: https://asixtan.com/api/health"
+echo "Containers:"
+docker compose ps
+
+echo "Health:"
+curl -fsS http://127.0.0.1:3000/api/health && echo || echo "Health check failed — run: docker compose logs -f asistan-app"
+
+echo "Public: https://asixtan.com/api/health"
