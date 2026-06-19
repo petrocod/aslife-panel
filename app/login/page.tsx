@@ -4,6 +4,9 @@ export const dynamic = "force-dynamic"
 
 import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { completeAuthFromUrlHash } from "@/lib/auth-hash-recovery"
+import { getAuthCallbackUrl } from "@/lib/auth-redirect"
+import { setAuthSessionCookie } from "@/lib/auth-session-cookie"
 import { supabase } from "@/lib/supabase-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,12 +32,35 @@ function LoginForm() {
   const [countdown, setCountdown] = useState(0)
 
   useEffect(() => {
-    const err = searchParams.get("error")
-    if (err) setError("Kimlik doğrulama başarısız. Lütfen tekrar giriş yapın.")
+    let cancelled = false
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push("/randevular/takvim")
-    })
+    async function bootstrap() {
+      const hashResult = await completeAuthFromUrlHash()
+      if (cancelled) return
+      if (hashResult.status === "redirected") return
+      if (hashResult.status === "done") {
+        router.replace(hashResult.destination)
+        return
+      }
+
+      const err = searchParams.get("error")
+      if (err && hashResult.status === "none") {
+        setError("Kimlik doğrulama başarısız. Lütfen tekrar giriş yapın.")
+      }
+
+      const { data: { session } } = await supabase.auth.getSession()
+      if (cancelled) return
+      if (session) {
+        setAuthSessionCookie(true)
+        const next = searchParams.get("next")
+        router.push(next && next.startsWith("/") ? next : "/randevular/takvim")
+      }
+    }
+
+    void bootstrap()
+    return () => {
+      cancelled = true
+    }
   }, [router, searchParams])
 
   useEffect(() => {
@@ -62,7 +88,9 @@ function LoginForm() {
     }
 
     if (data.session) {
-      router.push("/randevular/takvim")
+      setAuthSessionCookie(true)
+      const next = searchParams.get("next")
+      router.push(next && next.startsWith("/") ? next : "/randevular/takvim")
       router.refresh()
     }
   }
@@ -74,6 +102,7 @@ function LoginForm() {
       return
     }
     setError("")
+    setSuccess("")
     setOtpSending(true)
 
     const res = await fetch("/api/auth/send-otp", {
@@ -88,6 +117,9 @@ function LoginForm() {
       setOtpSent(true)
       setStep("otp")
       setCountdown(60)
+      if (data.devCode) {
+        setSuccess(`Doğrulama kodu: ${data.devCode} (SMS geçici olarak devre dışı)`)
+      }
     } else {
       setError(data.error || "Kod gönderilemedi.")
     }
@@ -119,7 +151,7 @@ function LoginForm() {
       password,
       options: {
         data: { full_name: fullName.trim(), phone: fullPhone },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: getAuthCallbackUrl(),
       },
     })
     setLoading(false)
@@ -163,13 +195,16 @@ function LoginForm() {
     if (!email) { setError("E-posta adresi zorunludur."); return }
     setError(""); setLoading(true)
 
-    const { error: sbError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + '/auth/callback?next=/hesabim/sifre-yenile',
+    const res = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     })
+    const data = await res.json()
     setLoading(false)
 
-    if (sbError) {
-      setError(sbError.message)
+    if (!data.ok) {
+      setError(data.error || "Bağlantı gönderilemedi.")
       return
     }
 

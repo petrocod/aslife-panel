@@ -14,7 +14,10 @@ export async function POST(req: NextRequest) {
       "unknown"
     const result = await sendOtp(phone, ip)
     if (result.ok) {
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({
+        ok: true,
+        ...(result.devCode ? { devCode: result.devCode } : {}),
+      })
     }
     return NextResponse.json({ error: result.error }, { status: 400 })
   } catch {

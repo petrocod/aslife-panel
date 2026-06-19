@@ -59,5 +59,10 @@ export async function GET() {
       'NEXT_PUBLIC_SUPABASE_ANON_KEY yanlışlıkla service_role ile doldurulmuş. Supabase Dashboard → Project Settings → API → "anon" / "public" anahtarını bu değişkene yapıştırın. SUPABASE_SERVICE_ROLE_KEY ayrı satırda kalır.'
     )
   }
-  return NextResponse.json({ ...out, jwtRoleHint: roleHint, warnings })
+  return NextResponse.json({
+    ...out,
+    jwtRoleHint: roleHint,
+    warnings,
+    otpDevFallback: (process.env.OTP_DEV_FALLBACK || "").trim().toLowerCase() === "true",
+  })
 }

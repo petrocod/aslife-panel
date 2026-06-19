@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server"
 const PUBLIC_PREFIXES = [
   "/login",
   "/auth/",
+  "/hesabim/sifre-yenile",
   "/unsubscribe",
   "/gizlilik",
   "/r/",
