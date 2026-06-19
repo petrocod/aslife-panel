@@ -108,8 +108,6 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseAdmin()
-
     const { data: org } = await supabase
       .from("organizations")
       .select("id, max_branches")
