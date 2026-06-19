@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils"
 import { useCompany } from "@/hooks/useCompany"
 import { usePlatformFlags } from "@/hooks/usePlatformFlags"
 import { useProfilePermissions } from "@/hooks/useProfilePermissions"
+import { SidebarAppMeta } from "@/components/layout/SidebarAppMeta"
 import { DEMO_COMPANY_ID, DEMO_MAX_APPOINTMENTS } from "@/lib/demo-limits"
 import type { PermissionModuleKey } from "@/lib/profile-permissions"
 
@@ -352,10 +353,11 @@ export function Sidebar() {
           </Link>
         </div>
 
-        <div className="px-4 pb-2">
+        <div className="mt-2 border-t border-sidebar-foreground/10 px-4 pb-3 pt-3">
           <Link href="/gizlilik" className="text-sidebar-muted text-xs hover:text-sidebar-foreground/90">
             Gizlilik Politikası
           </Link>
+          <SidebarAppMeta />
         </div>
       </div>
     </aside>

@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase-client"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,7 +12,7 @@ import {
   SelectItem,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { CreditCard, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { CreditCard, ChevronLeft, ChevronRight, Loader2, Store, X } from "lucide-react"
 
 type Plan = {
   id: string
@@ -45,6 +46,25 @@ const statusLabel: Record<string, string> = {
 }
 
 export default function AdminSubscriptionsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        </div>
+      }
+    >
+      <AdminSubscriptionsContent />
+    </Suspense>
+  )
+}
+
+function AdminSubscriptionsContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const presetCompanyId = searchParams.get("companyId") || ""
+  const [filterCompanyId, setFilterCompanyId] = useState(presetCompanyId)
+  const [filterCompanyName, setFilterCompanyName] = useState("")
   const [subs, setSubs] = useState<Sub[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +76,32 @@ export default function AdminSubscriptionsPage() {
 
   useEffect(() => {
     fetchSubs()
-  }, [page, filterStatus])
+  }, [page, filterStatus, filterCompanyId])
+
+  useEffect(() => {
+    if (!presetCompanyId) return
+    setFilterCompanyId(presetCompanyId)
+  }, [presetCompanyId])
+
+  useEffect(() => {
+    if (!filterCompanyId) {
+      setFilterCompanyName("")
+      return
+    }
+    void (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (!session) return
+      const res = await fetch(`/api/admin/companies/${filterCompanyId}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setFilterCompanyName(json.company?.name || "")
+      }
+    })()
+  }, [filterCompanyId])
 
   async function fetchSubs() {
     setLoading(true)
@@ -68,6 +113,7 @@ export default function AdminSubscriptionsPage() {
       limit: String(limit),
     })
     if (filterStatus) params.set("status", filterStatus)
+    if (filterCompanyId) params.set("companyId", filterCompanyId)
     const res = await fetch(`/api/admin/subscriptions?${params}`, {
       headers: { Authorization: `Bearer ${session?.access_token || ""}` },
     })
@@ -114,6 +160,40 @@ export default function AdminSubscriptionsPage() {
           Tüm abonelikleri yönetin ({total} kayıt)
         </p>
       </div>
+
+      {filterCompanyId && (
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2 text-slate-700">
+            <Store className="h-4 w-4 text-slate-500" />
+            <span>
+              Müşteri:{" "}
+              <strong>{filterCompanyName || filterCompanyId}</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                router.push(`/admin/companies/${filterCompanyId}`)
+              }
+            >
+              Müşteri Detayı
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterCompanyId("")
+                setFilterCompanyName("")
+                router.push("/admin/subscriptions")
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {statuses.map((s) => (
@@ -185,9 +265,23 @@ export default function AdminSubscriptionsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <CreditCard className="h-4 w-4 text-slate-400" />
-                          <span className="font-medium text-slate-900">
-                            {company?.name || sub.company_id}
-                          </span>
+                          {company?.name ? (
+                            <button
+                              type="button"
+                              className="font-medium text-slate-900 hover:text-violet-600 transition-colors text-left"
+                              onClick={() =>
+                                router.push(
+                                  `/admin/companies/${company.id || sub.company_id}`
+                                )
+                              }
+                            >
+                              {company.name}
+                            </button>
+                          ) : (
+                            <span className="font-medium text-slate-900">
+                              {sub.company_id}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">

@@ -30,14 +30,20 @@ export async function GET(req: NextRequest) {
 
   const enriched = await Promise.all(
     (companies || []).map(async (c) => {
-      const [customerCount, owner, sub] = await Promise.all([
+      const [customerCount, usersCount, owner, sub] = await Promise.all([
         supabase.from("customers").select("id", { count: "exact", head: true }).eq("company_id", c.id),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("company_id", c.id),
         supabase.from("profiles").select("full_name, email").eq("company_id", c.id).eq("role", "owner").limit(1).maybeSingle(),
-        supabase.from("company_subscriptions").select("plan_id, status").eq("company_id", c.id).limit(1).maybeSingle(),
+        supabase
+          .from("company_subscriptions")
+          .select("plan_id, status, trial_ends_at, current_period_end, created_at")
+          .eq("company_id", c.id)
+          .maybeSingle(),
       ])
       return {
         ...c,
         customers_count: customerCount.count || 0,
+        users_count: usersCount.count || 0,
         owner: owner.data || null,
         subscription: sub.data || null,
       }

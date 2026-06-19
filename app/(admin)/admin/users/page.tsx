@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense, useCallback, useEffect, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Search,
   MoreHorizontal,
@@ -16,6 +16,8 @@ import {
   UserPlus,
   Copy,
   CheckCircle,
+  X,
+  Store,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabase-client"
@@ -77,8 +79,11 @@ export default function AdminUsersPage() {
 }
 
 function AdminUsersContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const presetCompanyId = searchParams.get("companyId") || ""
+  const [filterCompanyId, setFilterCompanyId] = useState(presetCompanyId)
+  const [filterCompanyName, setFilterCompanyName] = useState("")
   const [users, setUsers] = useState<UserRow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -127,6 +132,7 @@ function AdminUsersContent() {
         limit: LIMIT.toString(),
       })
       if (search) params.set("search", search)
+      if (filterCompanyId) params.set("companyId", filterCompanyId)
 
       const res = await fetch(`/api/admin/users?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -141,7 +147,7 @@ function AdminUsersContent() {
     } finally {
       setLoading(false)
     }
-  }, [page, search])
+  }, [page, search, filterCompanyId])
 
   useEffect(() => {
     fetchUsers()
@@ -199,10 +205,28 @@ function AdminUsersContent() {
 
   useEffect(() => {
     if (!presetCompanyId) return
+    setFilterCompanyId(presetCompanyId)
     setNewCompanyId(presetCompanyId)
-    setCreateDialog(true)
     void loadCompanies()
   }, [presetCompanyId])
+
+  useEffect(() => {
+    if (!filterCompanyId) {
+      setFilterCompanyName("")
+      return
+    }
+    void (async () => {
+      const token = await getToken()
+      if (!token) return
+      const res = await fetch(`/api/admin/companies/${filterCompanyId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const json = await res.json()
+        setFilterCompanyName(json.company?.name || "")
+      }
+    })()
+  }, [filterCompanyId])
 
   async function handleCreateUser() {
     if (!newEmail || !newCompanyId) return
@@ -247,6 +271,40 @@ function AdminUsersContent() {
           {total} kullanıcı
         </Badge>
       </div>
+
+      {filterCompanyId && (
+        <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 text-muted-foreground" />
+            <span>
+              Filtre:{" "}
+              <strong>{filterCompanyName || filterCompanyId}</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                router.push(`/admin/companies/${filterCompanyId}`)
+              }
+            >
+              Müşteri Detayı
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setFilterCompanyId("")
+                setFilterCompanyName("")
+                router.push("/admin/users")
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
@@ -304,7 +362,23 @@ function AdminUsersContent() {
                       <td className="px-4 py-3 font-medium">{user.full_name || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{user.email || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{user.phone || "—"}</td>
-                      <td className="px-4 py-3">{user.companies?.name || "—"}</td>
+                      <td className="px-4 py-3">
+                        {user.companies?.name ? (
+                          <button
+                            type="button"
+                            className="text-primary hover:underline"
+                            onClick={() =>
+                              router.push(
+                                `/admin/companies/${user.company_id}`
+                              )
+                            }
+                          >
+                            {user.companies.name}
+                          </button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <Badge variant={roleMeta.variant}>{roleMeta.label}</Badge>
                       </td>

@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { setAuthSessionCookie } from "@/lib/auth-session-cookie"
 import { supabase } from "@/lib/supabase-client"
 
 export function AdminNavbar() {
@@ -42,6 +43,7 @@ export function AdminNavbar() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
+    setAuthSessionCookie(false)
     router.push("/login")
   }
 

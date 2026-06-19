@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const search = searchParams.get("search")?.trim() || ""
+    const companyId = searchParams.get("companyId")?.trim() || ""
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)))
     const offset = (page - 1) * limit
@@ -56,6 +57,9 @@ export async function GET(req: NextRequest) {
 
     if (search) {
       query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`)
+    }
+    if (companyId) {
+      query = query.eq("company_id", companyId)
     }
 
     const { data, error, count } = await query

@@ -52,8 +52,12 @@
 
 ## Deploy
 
+راهنمای کامل: **[DEPLOY.md](./DEPLOY.md)** (دامنه/IP، env سرور، GitHub Actions، به‌روزرسانی بعد از هر تغییر)
+
+خلاصه:
+
 1. Secrets GitHub: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`
-2. `.env.local` روی VPS
+2. `.env.local` روی VPS (با `NEXT_PUBLIC_BASE_URL` دامنه یا IP)
 3. Push `main` → workflow deploy
 4. `curl -H "Authorization: Bearer $CRON_SECRET" https://DOMAIN/api/cron/notifications`
 

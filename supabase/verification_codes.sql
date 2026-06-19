@@ -9,8 +9,10 @@ CREATE TABLE IF NOT EXISTS public.verification_codes (
 
 ALTER TABLE public.verification_codes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Service role full access"
-  ON public.verification_codes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "verification_codes_service_role"
+  ON public.verification_codes FOR ALL
+  TO service_role
+  USING (true) WITH CHECK (true);
 
 CREATE INDEX idx_verification_codes_phone ON public.verification_codes(phone, verified);
 CREATE INDEX idx_verification_codes_expires ON public.verification_codes(expires_at);

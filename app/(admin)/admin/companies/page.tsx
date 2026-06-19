@@ -53,10 +53,13 @@ interface Company {
   organization: { id: string; name: string; slug: string } | null
   owner: { id: string; full_name: string } | null
   customers_count: number
+  users_count: number
   subscription: {
     plan_id: string
     status: string
     trial_ends_at: string | null
+    current_period_end: string | null
+    created_at: string
   } | null
 }
 
@@ -290,10 +293,13 @@ export default function AdminCompaniesPage() {
                   Sahip / Giriş
                 </th>
                 <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Müşteri Sayısı
+                  Kullanıcılar
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Abonelik Planı
+                  Abonelik
+                </th>
+                <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Abonelik Tarihleri
                 </th>
                 <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Durum
@@ -309,7 +315,7 @@ export default function AdminCompaniesPage() {
             <tbody>
               {loading && !data ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center">
+                  <td colSpan={8} className="py-20 text-center">
                     <Loader2 className="h-6 w-6 animate-spin text-slate-400 mx-auto" />
                     <p className="text-sm text-slate-500 mt-2">
                       Yükleniyor...
@@ -318,7 +324,7 @@ export default function AdminCompaniesPage() {
                 </tr>
               ) : !data?.companies?.length ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center">
+                  <td colSpan={8} className="py-20 text-center">
                     <Store className="h-8 w-8 text-slate-300 mx-auto" />
                     <p className="text-sm text-slate-500 mt-2">
                       Şirket bulunamadı
@@ -362,11 +368,29 @@ export default function AdminCompaniesPage() {
                     <td className="py-3 px-4 text-center">
                       <div className="inline-flex items-center gap-1 text-slate-700">
                         <Users className="h-3.5 w-3.5 text-slate-400" />
-                        {c.customers_count}
+                        {c.users_count}
                       </div>
                     </td>
                     <td className="py-3 px-4">
                       <PlanBadge sub={c.subscription} />
+                    </td>
+                    <td className="py-3 px-4 text-xs text-slate-500">
+                      {c.subscription ? (
+                        <div className="space-y-0.5">
+                          <div>
+                            Başlangıç: {formatDate(c.subscription.created_at)}
+                          </div>
+                          <div>
+                            {c.subscription.status === "trialing" && c.subscription.trial_ends_at
+                              ? `Deneme bitiş: ${formatDate(c.subscription.trial_ends_at)}`
+                              : c.subscription.current_period_end
+                                ? `Periyot sonu: ${formatDate(c.subscription.current_period_end)}`
+                                : "—"}
+                          </div>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       {(c.is_active ?? true) ? (
@@ -419,6 +443,16 @@ export default function AdminCompaniesPage() {
                           >
                             <Users className="h-4 w-4 mr-2" />
                             Kullanıcılar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(
+                                `/admin/subscriptions?companyId=${c.id}`
+                              )
+                            }
+                          >
+                            <CreditCard className="h-4 w-4 mr-2" />
+                            Abonelik
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

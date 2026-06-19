@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { setAuthSessionCookie } from "@/lib/auth-session-cookie"
 import { supabase } from "@/lib/supabase-client"
 import { getTemplateById } from "@/lib/musteri-bildirimleri"
 import { ASISTAN_TAB_COPY, normalizeAsistanTab } from "@/lib/asistan-tabs"
@@ -335,6 +336,7 @@ function NavbarInner() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
+    setAuthSessionCookie(false)
     router.push("/login")
   }
 

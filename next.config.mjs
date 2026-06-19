@@ -1,5 +1,18 @@
+import { readFileSync } from "fs"
+import { dirname, join } from "path"
+import { fileURLToPath } from "url"
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const pkg = JSON.parse(readFileSync(join(__dirname, "package.json"), "utf8"))
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
+  env: {
+    NEXT_PUBLIC_APP_VERSION: pkg.version,
+    NEXT_PUBLIC_SALES_EMAIL:
+      process.env.NEXT_PUBLIC_SALES_EMAIL || "satis@aslife.com.tr",
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },

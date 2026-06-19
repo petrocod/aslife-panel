@@ -24,6 +24,7 @@ import {
   UserCircle,
   BarChart3,
   Clock,
+  ExternalLink,
 } from "lucide-react"
 
 interface CompanyDetail {
@@ -35,7 +36,6 @@ interface CompanyDetail {
   city: string | null
   currency: string
   service_type: string
-  is_active?: boolean
   created_at: string
   organization_id: string
 }
@@ -44,12 +44,18 @@ interface OrgInfo {
   id: string
   name: string
   slug: string
+  owner_email: string | null
 }
 
 interface Profile {
   id: string
-  full_name: string
+  full_name: string | null
+  email: string | null
+  phone: string | null
   role: string
+  is_active: boolean
+  last_login: string | null
+  created_at: string
 }
 
 interface SubDetail {
@@ -57,10 +63,21 @@ interface SubDetail {
   plan_id: string
   status: string
   trial_ends_at: string | null
+  current_period_end: string | null
+  cancel_at_period_end: boolean | null
+  mrr: number | null
   created_at: string
+  updated_at: string
+  subscription_plans: {
+    id: string
+    name_tr: string
+    monthly_price: number
+    annual_price: number
+  } | null
 }
 
 interface Stats {
+  users: number
   customers: number
   appointments: number
   revenue: number
@@ -79,111 +96,50 @@ export default function CompanyDetailPage() {
   const companyId = params.id as string
   const { adminRole } = useAdmin()
   const [trialBusy, setTrialBusy] = useState(false)
+  const [activeTab, setActiveTab] = useState("info")
 
   const [company, setCompany] = useState<CompanyDetail | null>(null)
   const [org, setOrg] = useState<OrgInfo | null>(null)
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [subscription, setSubscription] = useState<SubDetail | null>(null)
   const [stats, setStats] = useState<Stats>({
+    users: 0,
     customers: 0,
     appointments: 0,
     revenue: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
+    setError("")
     try {
-      const { data: companyData } = await supabase
-        .from("companies")
-        .select("*")
-        .eq("id", companyId)
-        .single()
-
-      if (!companyData) {
-        setLoading(false)
+      const token = await getToken()
+      if (!token) {
+        setError("Oturum bulunamadı.")
         return
       }
-      setCompany(companyData)
 
-      const promises: PromiseLike<void>[] = []
+      const res = await fetch(`/api/admin/companies/${companyId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = await res.json()
 
-      if (companyData.organization_id) {
-        promises.push(
-          // @ts-ignore — Supabase chain typing vs Promise.allSettled
-          supabase
-            .from("organizations")
-            .select("id, name, slug")
-            .eq("id", companyData.organization_id)
-            .single()
-            .then(({ data }) => {
-              if (data) setOrg(data)
-            })
-        )
+      if (!res.ok) {
+        setError(json.error || "Yüklenemedi.")
+        setCompany(null)
+        return
       }
 
-      promises.push(
-        supabase
-          .from("profiles")
-          .select("id, full_name, role")
-          .eq("company_id", companyId)
-          .order("role")
-          .then(({ data }) => {
-            if (data) setProfiles(data)
-          })
-      )
-
-      promises.push(
-        supabase
-          .from("company_subscriptions")
-          .select("id, plan_id, status, trial_ends_at, created_at")
-          .eq("company_id", companyId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single()
-          .then(({ data }) => {
-            if (data) setSubscription(data)
-          })
-      )
-
-      promises.push(
-        supabase
-          .from("customers")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", companyId)
-          .then(({ count }) => {
-            setStats((prev) => ({ ...prev, customers: count ?? 0 }))
-          })
-      )
-
-      promises.push(
-        supabase
-          .from("appointments")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", companyId)
-          .then(({ count }) => {
-            setStats((prev) => ({ ...prev, appointments: count ?? 0 }))
-          })
-      )
-
-      promises.push(
-        supabase
-          .from("finance_transactions")
-          .select("amount")
-          .eq("company_id", companyId)
-          .eq("type", "income")
-          .then(({ data }) => {
-            const total = (data || []).reduce(
-              (sum, t) => sum + (t.amount || 0),
-              0
-            )
-            setStats((prev) => ({ ...prev, revenue: total }))
-          })
-      )
-
-      await Promise.allSettled(promises)
+      setCompany(json.company)
+      setOrg(json.organization || null)
+      setProfiles(json.users || [])
+      setSubscription(json.subscription || null)
+      setStats(json.stats || { users: 0, customers: 0, appointments: 0, revenue: 0 })
     } catch {
-      /* silently fail */
+      setError("Bağlantı hatası.")
+      setCompany(null)
     } finally {
       setLoading(false)
     }
@@ -192,6 +148,13 @@ export default function CompanyDetailPage() {
   useEffect(() => {
     fetchAll()
   }, [fetchAll])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (window.location.hash === "#subscription") {
+      setActiveTab("subscription")
+    }
+  }, [])
 
   function handleLoginAs() {
     alert(`Login as company: ${companyId} — Bu özellik henüz aktif değil.`)
@@ -202,6 +165,10 @@ export default function CompanyDetailPage() {
     asistan_plus: "aSistan Plus",
     asistan_pro: "aSistan Pro",
   }
+
+  const planName =
+    subscription?.subscription_plans?.name_tr ||
+    (subscription ? planLabels[subscription.plan_id] || subscription.plan_id : "Yok")
 
   if (loading) {
     return (
@@ -215,7 +182,7 @@ export default function CompanyDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
         <Store className="h-12 w-12 text-slate-300" />
-        <p className="text-slate-500">Şirket bulunamadı</p>
+        <p className="text-slate-500">{error || "Şirket bulunamadı"}</p>
         <Button
           variant="ghost"
           onClick={() => router.push("/admin/companies")}
@@ -231,7 +198,6 @@ export default function CompanyDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -248,14 +214,7 @@ export default function CompanyDetailPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-900">{company.name}</h1>
             <div className="flex items-center gap-2 text-sm text-slate-500">
-              {org && (
-                <button
-                  onClick={() => router.push(`/admin/organizations/${org.id}`)}
-                  className="hover:text-violet-600 transition-colors"
-                >
-                  {org.name}
-                </button>
-              )}
+              {org && <span>{org.name}</span>}
               {company.service_type && (
                 <>
                   <span className="text-slate-300">·</span>
@@ -265,12 +224,25 @@ export default function CompanyDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {(company.is_active ?? true) ? (
-            <Badge variant="success">Aktif</Badge>
-          ) : (
-            <Badge variant="destructive">Pasif</Badge>
-          )}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/admin/users?companyId=${companyId}`)}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Kullanıcılar ({stats.users})
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              router.push(`/admin/subscriptions?companyId=${companyId}`)
+            }
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Abonelik
+          </Button>
           <Button
             onClick={handleLoginAs}
             variant="outline"
@@ -283,15 +255,21 @@ export default function CompanyDetailPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
-            label: "Müşteriler",
-            value: stats.customers,
+            label: "Giriş Kullanıcıları",
+            value: stats.users,
             icon: Users,
             color: "text-blue-600",
             bg: "bg-blue-100",
+          },
+          {
+            label: "Kayıtlı Müşteriler",
+            value: stats.customers,
+            icon: UserCircle,
+            color: "text-indigo-600",
+            bg: "bg-indigo-100",
           },
           {
             label: "Randevular",
@@ -301,17 +279,8 @@ export default function CompanyDetailPage() {
             bg: "bg-emerald-100",
           },
           {
-            label: "Gelir",
-            value: formatCurrency(stats.revenue, company.currency),
-            icon: DollarSign,
-            color: "text-amber-600",
-            bg: "bg-amber-100",
-          },
-          {
             label: "Plan",
-            value: subscription
-              ? planLabels[subscription.plan_id] || subscription.plan_id
-              : "Yok",
+            value: planName,
             icon: CreditCard,
             color: "text-violet-600",
             bg: "bg-violet-100",
@@ -338,55 +307,72 @@ export default function CompanyDetailPage() {
         ))}
       </div>
 
-      <Tabs defaultValue="info" className="w-full">
+      {subscription && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-slate-500 uppercase">Abonelik Durumu</p>
+            <p className="font-medium mt-1">{subscription.status}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase">Başlangıç</p>
+            <p className="font-medium mt-1">
+              {formatDate(subscription.created_at, "dd.MM.yyyy")}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase">
+              {subscription.status === "trialing" ? "Deneme Bitiş" : "Periyot Sonu"}
+            </p>
+            <p className="font-medium mt-1">
+              {subscription.status === "trialing" && subscription.trial_ends_at
+                ? formatDate(subscription.trial_ends_at, "dd.MM.yyyy")
+                : subscription.current_period_end
+                  ? formatDate(subscription.current_period_end, "dd.MM.yyyy")
+                  : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase">Aylık Ücret</p>
+            <p className="font-medium mt-1">
+              {subscription.subscription_plans?.monthly_price != null
+                ? formatCurrency(
+                    subscription.subscription_plans.monthly_price,
+                    company.currency
+                  )
+                : subscription.mrr
+                  ? formatCurrency(subscription.mrr, company.currency)
+                  : "—"}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-100 border border-slate-200">
-          <TabsTrigger
-            value="info"
-            className="data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-500"
-          >
-            Bilgiler
-          </TabsTrigger>
-          <TabsTrigger
-            value="users"
-            className="data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-500"
-          >
+          <TabsTrigger value="info">Bilgiler</TabsTrigger>
+          <TabsTrigger value="users">
             Kullanıcılar ({profiles.length})
           </TabsTrigger>
-          <TabsTrigger
-            value="subscription"
-            className="data-[state=active]:bg-white data-[state=active]:text-slate-900 text-slate-500"
-          >
-            Abonelik
-          </TabsTrigger>
+          <TabsTrigger value="subscription">Abonelik</TabsTrigger>
         </TabsList>
 
-        {/* Info Tab */}
         <TabsContent value="info">
           <div className="rounded-xl border border-slate-200 bg-white p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[
                 { label: "Şirket Adı", value: company.name, icon: Store },
-                {
-                  label: "Telefon",
-                  value: company.phone || "—",
-                  icon: Phone,
-                },
-                {
-                  label: "E-posta",
-                  value: company.email || "—",
-                  icon: Mail,
-                },
+                { label: "Telefon", value: company.phone || "—", icon: Phone },
+                { label: "E-posta", value: company.email || "—", icon: Mail },
                 {
                   label: "Adres",
                   value:
-                    [company.address, company.city]
-                      .filter(Boolean)
-                      .join(", ") || "—",
+                    [company.address, company.city].filter(Boolean).join(", ") ||
+                    "—",
                   icon: Globe,
                 },
                 {
                   label: "Sahip",
-                  value: owner?.full_name || "—",
+                  value: owner?.full_name || owner?.email || "—",
                   icon: UserCircle,
                 },
                 {
@@ -395,8 +381,8 @@ export default function CompanyDetailPage() {
                   icon: BarChart3,
                 },
                 {
-                  label: "Para Birimi",
-                  value: company.currency,
+                  label: "Gelir (toplam)",
+                  value: formatCurrency(stats.revenue, company.currency),
                   icon: DollarSign,
                 },
                 {
@@ -413,9 +399,7 @@ export default function CompanyDetailPage() {
                     <p className="text-xs text-slate-500 uppercase tracking-wider">
                       {item.label}
                     </p>
-                    <p className="text-sm text-slate-900 mt-0.5">
-                      {item.value}
-                    </p>
+                    <p className="text-sm text-slate-900 mt-0.5">{item.value}</p>
                   </div>
                 </div>
               ))}
@@ -423,7 +407,6 @@ export default function CompanyDetailPage() {
           </div>
         </TabsContent>
 
-        {/* Users Tab */}
         <TabsContent value="users">
           <div className="mb-3 flex justify-end">
             <Button
@@ -445,12 +428,21 @@ export default function CompanyDetailPage() {
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100">
+                  <tr className="border-b border-slate-100 bg-slate-50">
                     <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase">
                       Ad Soyad
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase">
+                      E-posta
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase">
                       Rol
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase">
+                      Durum
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase">
+                      Son Giriş
                     </th>
                   </tr>
                 </thead>
@@ -460,37 +452,30 @@ export default function CompanyDetailPage() {
                       owner: "Sahip",
                       admin: "Admin",
                       manager: "Yönetici",
+                      member: "Üye",
                       employee: "Çalışan",
                     }
-                    const roleBg: Record<string, string> = {
-                      owner:
-                        "bg-violet-100 text-violet-700 border-violet-200",
-                      admin: "bg-blue-100 text-blue-700 border-blue-200",
-                      manager:
-                        "bg-amber-100 text-amber-700 border-amber-200",
-                      employee:
-                        "bg-slate-100 text-slate-600 border-slate-200",
-                    }
                     return (
-                      <tr
-                        key={p.id}
-                        className="border-b border-slate-50"
-                      >
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <UserCircle className="h-5 w-5 text-slate-400" />
-                            <span className="text-slate-900">
-                              {p.full_name || "İsimsiz"}
-                            </span>
-                          </div>
+                      <tr key={p.id} className="border-b border-slate-50">
+                        <td className="py-3 px-4">{p.full_name || "—"}</td>
+                        <td className="py-3 px-4 text-slate-600">
+                          {p.email || "—"}
                         </td>
                         <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${roleBg[p.role] || roleBg.employee}`}
-                          >
+                          <span className="inline-flex items-center gap-1 text-xs">
                             <Shield className="h-3 w-3" />
                             {roleLabel[p.role] || p.role}
                           </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge variant={p.is_active ? "success" : "destructive"}>
+                            {p.is_active ? "Aktif" : "Askıda"}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-500">
+                          {p.last_login
+                            ? formatDate(p.last_login, "dd.MM.yyyy HH:mm")
+                            : "—"}
                         </td>
                       </tr>
                     )
@@ -501,8 +486,7 @@ export default function CompanyDetailPage() {
           </div>
         </TabsContent>
 
-        {/* Subscription Tab */}
-        <TabsContent value="subscription">
+        <TabsContent value="subscription" id="subscription">
           <div className="rounded-xl border border-slate-200 bg-white p-6">
             {!subscription ? (
               <div className="py-12 text-center">
@@ -519,8 +503,7 @@ export default function CompanyDetailPage() {
                       Plan
                     </p>
                     <p className="text-lg font-semibold text-slate-900 mt-1">
-                      {planLabels[subscription.plan_id] ||
-                        subscription.plan_id}
+                      {planName}
                     </p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200 p-4">
@@ -535,27 +518,49 @@ export default function CompanyDetailPage() {
                       ) : subscription.status === "canceled" ? (
                         <Badge variant="destructive">İptal</Badge>
                       ) : (
-                        <Badge variant="secondary">
-                          {subscription.status}
-                        </Badge>
+                        <Badge variant="secondary">{subscription.status}</Badge>
                       )}
                     </div>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200 p-4">
                     <p className="text-xs text-slate-500 uppercase tracking-wider">
-                      Deneme Bitiş
+                      {subscription.status === "trialing"
+                        ? "Deneme Bitiş"
+                        : "Periyot Sonu"}
                     </p>
                     <p className="text-lg font-semibold text-slate-900 mt-1">
-                      {subscription.trial_ends_at
+                      {subscription.status === "trialing" &&
+                      subscription.trial_ends_at
                         ? formatDate(subscription.trial_ends_at, "dd.MM.yyyy")
-                        : "—"}
+                        : subscription.current_period_end
+                          ? formatDate(
+                              subscription.current_period_end,
+                              "dd.MM.yyyy"
+                            )
+                          : "—"}
                     </p>
                   </div>
                 </div>
-                <div className="text-xs text-slate-400">
-                  Abonelik başlangıcı:{" "}
-                  {formatDate(subscription.created_at, "dd.MM.yyyy HH:mm")}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
+                  <p>
+                    Abonelik başlangıcı:{" "}
+                    {formatDate(subscription.created_at, "dd.MM.yyyy HH:mm")}
+                  </p>
+                  <p>
+                    Son güncelleme:{" "}
+                    {formatDate(subscription.updated_at, "dd.MM.yyyy HH:mm")}
+                  </p>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    router.push(`/admin/subscriptions?companyId=${companyId}`)
+                  }
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Abonelikler sayfasında yönet
+                </Button>
                 {adminRole === "super_admin" && (
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
                     <Button
@@ -565,16 +570,19 @@ export default function CompanyDetailPage() {
                       onClick={async () => {
                         setTrialBusy(true)
                         const token = await getToken()
-                        await fetch(`/api/admin/companies/${companyId}/trial`, {
-                          method: "POST",
-                          headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "application/json",
-                          },
-                          body: JSON.stringify({ enable: true, days: 14 }),
-                        })
+                        await fetch(
+                          `/api/admin/companies/${companyId}/trial`,
+                          {
+                            method: "POST",
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ enable: true, days: 14 }),
+                          }
+                        )
                         setTrialBusy(false)
-                        window.location.reload()
+                        await fetchAll()
                       }}
                     >
                       14 gün deneme aç
@@ -586,16 +594,19 @@ export default function CompanyDetailPage() {
                       onClick={async () => {
                         setTrialBusy(true)
                         const token = await getToken()
-                        await fetch(`/api/admin/companies/${companyId}/trial`, {
-                          method: "POST",
-                          headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "application/json",
-                          },
-                          body: JSON.stringify({ enable: false }),
-                        })
+                        await fetch(
+                          `/api/admin/companies/${companyId}/trial`,
+                          {
+                            method: "POST",
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ enable: false }),
+                          }
+                        )
                         setTrialBusy(false)
-                        window.location.reload()
+                        await fetchAll()
                       }}
                     >
                       Denemeyi kapat

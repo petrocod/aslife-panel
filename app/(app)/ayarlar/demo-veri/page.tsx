@@ -3,7 +3,9 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { DemoDataToggle } from "@/components/settings/DemoDataToggle"
 import { DEMO_COMPANY_ID, useCompany } from "@/hooks/useCompany"
+import { runDemoSeedOp } from "@/lib/demo-data-client"
 
 export default function DemoVeriPage() {
   const { companyId, loading: cidLoading } = useCompany()
@@ -15,22 +17,16 @@ export default function DemoVeriPage() {
   async function post(op: "seed" | "clear") {
     setErrTxt("")
     setStatTxt("")
-    if (!companyId) return
-    if (companyId !== DEMO_COMPANY_ID) return
+    if (!companyId || companyId !== DEMO_COMPANY_ID) return
     setBusy(true)
     try {
-      const res = await fetch("/api/demo-seed", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ op, companyId: DEMO_COMPANY_ID }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || "İstek başarısız")
-      if (op === "clear") setStatTxt(data.message || "Silindi.")
-      else if (data.stats) {
-        const s = data.stats
+      const result = await runDemoSeedOp(op)
+      if (!result.ok) throw new Error(result.error || "İstek başarısız")
+      if (op === "clear") setStatTxt(result.message || "Silindi.")
+      else if (result.stats) {
+        const s = result.stats
         setStatTxt(
-          `Randevu: ${s.appointments}, Yaklaşık tahsilat kaydı: ${s.payments}, Müşteri: ${s.customers}, Çalışan: ${s.employees}, Hizmet: ${s.services}, Paket: ${s.packages}`
+          `Randevu: ${s.appointments}, Ödeme kaydı: ${s.payments}, Müşteri: ${s.customers}, Çalışan: ${s.employees}, Hizmet: ${s.services}, Paket: ${s.packages}`
         )
       }
     } catch (e: unknown) {
@@ -43,20 +39,20 @@ export default function DemoVeriPage() {
   return (
     <div className="p-6 max-w-2xl space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Test verisi (Demo)</h1>
+        <h1 className="text-lg font-semibold text-slate-900">Test verisi</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Randevu takvimi, müşteriler, ödemeler ve paket akışlarını denemek için yapay veri — yalnızca demo şirket
-          kimliği üzerinde çalışır (giriş yapmadan veya demo oturumunda kullanın).
+          Takvim, müşteri ve ödeme akışlarını denemek için örnek veri yükleyin veya silin.
         </p>
       </div>
+
+      <DemoDataToggle />
 
       {!cidLoading && !isDemo && (
         <Card className="border-amber-300 bg-amber-50/80">
           <CardHeader>
-            <CardTitle className="text-base">Bu hesap demo değil</CardTitle>
+            <CardTitle className="text-base">Bu hesap test modunda değil</CardTitle>
             <CardDescription>
-              Test verisi yükleme şu an için yalnızca demo şirket kimliğinde etkindir.
-              Gerçek şirkette denemek için giriş yapmadan kullanın.
+              Test verisi yalnızca demo şirket kimliğinde kullanılabilir (giriş yapmadan veya demo hesabı).
             </CardDescription>
           </CardHeader>
         </Card>
@@ -64,12 +60,9 @@ export default function DemoVeriPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Çoklu dolu takvim + tek tıkta temizlik</CardTitle>
+          <CardTitle className="text-base">Manuel yükleme / silme</CardTitle>
           <CardDescription>
-            Son <strong>7 gün</strong> ile <strong>gelecek 10 gün</strong> için her günde yaklaşık 7 randevu
-            (aynı saatte farklı personeller ve aynı personelde üst üste bindirilmiş slotlar dahil); tutarları
-            farklı, bir kısmı iptalli, yaklaşık yarısı ödeme kayıtlılı; kampanya, SMS paketi ve komisyon kuralı
-            örneği eklenir.
+            Son 7 gün ve gelecek 10 gün için dolu takvim, müşteri, ödeme ve paket örnekleri.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
@@ -88,27 +81,18 @@ export default function DemoVeriPage() {
               const ok =
                 typeof window !== "undefined" &&
                 window.confirm(
-                  "Demo şirketindeki yüklü tüm işletme verisi (yerler, çalışanlar, müşteri, randevu, paket…) silinsin mi? Şirket satırı ve çalışma saatleri kalır."
+                  "Yüklenen test verileri silinsin mi? Şirket kaydı ve çalışma saatleri kalır."
                 )
               if (ok) void post("clear")
             }}
           >
-            Tümünü tek tıkta sil
+            Tümünü sil
           </Button>
         </CardContent>
       </Card>
 
       {statTxt && <p className="text-sm text-green-700">{statTxt}</p>}
       {errTxt && <p className="text-sm text-destructive">{errTxt}</p>}
-
-      <Card className="border-slate-200 bg-slate-50/80">
-        <CardHeader>
-          <CardTitle className="text-base">Sistem veri çekemiyorsa</CardTitle>
-          <CardDescription>
-            <p>Veriler yüklenmiyorsa lütfen sayfayı yenileyin veya destek ekibimiz ile iletişime geçin.</p>
-          </CardDescription>
-        </CardHeader>
-      </Card>
     </div>
   )
 }
