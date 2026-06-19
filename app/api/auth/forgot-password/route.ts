@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-function getAuthCallbackBaseUrl(): string {
-  const base = (process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/$/, "")
-  if (base) return base
-  return "http://localhost:3000"
-}
+import { getAuthCallbackBaseUrl } from "@/lib/auth-redirect"
 
 export async function POST(req: NextRequest) {
   try {

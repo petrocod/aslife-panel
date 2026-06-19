@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { isPublicSignupEnabled } from "@/lib/signup-config"
 
 function normalizePhone(phone: string): string {
   let cleaned = phone.replace(/\D/g, "")
@@ -12,6 +13,13 @@ function normalizePhone(phone: string): string {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isPublicSignupEnabled()) {
+      return NextResponse.json(
+        { error: "Yeni kayıt şu anda kapalıdır. Yöneticinizden davet isteyin." },
+        { status: 403 }
+      )
+    }
+
     const { email, password, fullName, phone } = await req.json()
 
     if (!email || !password || !fullName || !phone) {

@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { sendOtp } from "@/lib/otp"
+import { isPublicSignupEnabled } from "@/lib/signup-config"
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isPublicSignupEnabled()) {
+      return NextResponse.json(
+        { error: "Telefon doğrulama yalnızca açık kayıt döneminde kullanılır." },
+        { status: 403 }
+      )
+    }
+
     const { phone } = await req.json()
     if (!phone) {
       return NextResponse.json({ error: "Telefon numarası gerekli." }, { status: 400 })

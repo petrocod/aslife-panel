@@ -8,7 +8,7 @@ import { CompanyRegisterForm } from "@/components/settings/CompanyRegisterForm"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, Save } from "lucide-react"
+import { Loader2, Save, Lock, Eye, EyeOff } from "lucide-react"
 
 export default function ProfilPage() {
   const { companyId, userId, refetch: refetchCompany } = useCompany()
@@ -19,6 +19,12 @@ export default function ProfilPage() {
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordError, setPasswordError] = useState("")
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -41,6 +47,38 @@ export default function ProfilPage() {
       setLoading(false)
     })
   }, [])
+
+  async function handlePasswordChange() {
+    if (!newPassword || !confirmPassword) {
+      setPasswordError("Tüm şifre alanları zorunludur.")
+      return
+    }
+    if (newPassword.length < 6) {
+      setPasswordError("Şifre en az 6 karakter olmalıdır.")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Şifreler eşleşmiyor.")
+      return
+    }
+
+    setPasswordSaving(true)
+    setPasswordError("")
+    setPasswordSuccess(false)
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setPasswordSaving(false)
+
+    if (error) {
+      setPasswordError(error.message)
+      return
+    }
+
+    setNewPassword("")
+    setConfirmPassword("")
+    setPasswordSuccess(true)
+    setTimeout(() => setPasswordSuccess(false), 3000)
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -130,6 +168,67 @@ export default function ProfilPage() {
         <Button onClick={() => void handleSave()} disabled={saving} className="w-full gap-2">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Kaydet
+        </Button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+        <h2 className="font-semibold text-slate-800 text-base mb-2">Şifre Değiştir</h2>
+        <p className="text-xs text-slate-500">
+          Şifrenizi unuttuysanız{" "}
+          <Link href="/login" className="text-blue-600 hover:underline">
+            giriş sayfasından
+          </Link>{" "}
+          sıfırlama bağlantısı isteyebilirsiniz.
+        </p>
+
+        {passwordError && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{passwordError}</div>
+        )}
+        {passwordSuccess && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-600">
+            Şifreniz güncellendi.
+          </div>
+        )}
+
+        <div>
+          <Label className="text-xs font-medium text-slate-600">Yeni Şifre</Label>
+          <div className="relative mt-1.5">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              type={showNewPassword ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="pl-9 pr-10"
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              onClick={() => setShowNewPassword(!showNewPassword)}
+            >
+              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <Label className="text-xs font-medium text-slate-600">Yeni Şifre Tekrar</Label>
+          <Input
+            type={showNewPassword ? "text" : "password"}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void handlePasswordChange()}
+            className="mt-1.5"
+          />
+        </div>
+
+        <Button
+          variant="outline"
+          onClick={() => void handlePasswordChange()}
+          disabled={passwordSaving}
+          className="w-full gap-2"
+        >
+          {passwordSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+          Şifreyi Güncelle
         </Button>
       </div>
     </div>

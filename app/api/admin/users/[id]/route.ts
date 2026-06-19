@@ -89,6 +89,9 @@ export async function PATCH(
       const { error } = await supabase.auth.admin.generateLink({
         type: "recovery",
         email: profile.email,
+        options: {
+          redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "") || "https://asixtan.com"}/auth/callback`,
+        },
       })
 
       if (error) {

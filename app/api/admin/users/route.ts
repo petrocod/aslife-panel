@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyUserBearer } from "@/lib/sms-route-auth"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { getAuthCallbackBaseUrl } from "@/lib/auth-redirect"
 
 async function verifyAdmin(req: NextRequest) {
   const userResult = await verifyUserBearer(req)
@@ -82,6 +83,12 @@ export async function POST(req: NextRequest) {
     if (!admin) {
       return NextResponse.json({ error: "Yetkisiz erişim." }, { status: 403 })
     }
+    if (admin.role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Kullanıcı oluşturma yalnızca super_admin tarafından yapılabilir." },
+        { status: 403 }
+      )
+    }
 
     const body = await req.json()
     const { email, fullName, phone, companyId, role } = body
@@ -95,10 +102,15 @@ export async function POST(req: NextRequest) {
     const tempPassword = Math.random().toString(36).slice(-10) + "A1!"
 
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email,
+      email: String(email).trim().toLowerCase(),
       password: tempPassword,
       email_confirm: true,
-      user_metadata: { full_name: fullName || "", phone: phone || "" },
+      user_metadata: {
+        full_name: fullName || "",
+        phone: phone || "",
+        invited_company_id: companyId,
+        invited_role: role || "member",
+      },
     })
 
     if (authError) {
@@ -112,35 +124,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Kullanıcı oluşturulamadı." }, { status: 500 })
     }
 
-    const { data: company } = await supabase
-      .from("companies")
-      .select("organization_id")
-      .eq("id", companyId)
-      .single()
-
-    await supabase.from("profiles").upsert({
-      id: authUser.user.id,
-      email,
-      full_name: fullName || "",
-      phone: phone || "",
-      company_id: companyId,
-      organization_id: company?.organization_id || null,
-      role: role || "member",
-    })
-
-    if (company?.organization_id) {
-      await supabase.from("organization_members").upsert({
-        organization_id: company.organization_id,
-        user_id: authUser.user.id,
-        role: role || "member",
-        status: "active",
-        accepted_at: new Date().toISOString(),
-      })
-    }
-
+    const callbackUrl = `${getAuthCallbackBaseUrl()}/auth/callback`
     const { error: resetError } = await supabase.auth.admin.generateLink({
       type: "recovery",
-      email,
+      email: String(email).trim().toLowerCase(),
+      options: { redirectTo: callbackUrl },
     })
 
     return NextResponse.json({

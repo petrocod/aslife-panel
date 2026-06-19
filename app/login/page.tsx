@@ -29,6 +29,21 @@ function LoginForm() {
   const [success, setSuccess] = useState("")
   const [otpSent, setOtpSent] = useState(false)
   const [countdown, setCountdown] = useState(0)
+  const [signupEnabled, setSignupEnabled] = useState(false)
+
+  useEffect(() => {
+    fetch("/api/auth/config")
+      .then((r) => r.json())
+      .then((d) => setSignupEnabled(Boolean(d.signupEnabled)))
+      .catch(() => setSignupEnabled(false))
+  }, [])
+
+  useEffect(() => {
+    if (!signupEnabled && mode === "register") {
+      setMode("login")
+      setStep("form")
+    }
+  }, [signupEnabled, mode])
 
   useEffect(() => {
     let cancelled = false
@@ -398,13 +413,13 @@ function LoginForm() {
                   Giriş Yap
                 </button>
               </>
-            ) : mode === "login" ? (
+            ) : mode === "login" && signupEnabled ? (
               <>Hesabınız yok mu?{" "}
                 <button onClick={() => { setMode("register"); setError(""); setSuccess("") }} className="text-blue-600 hover:underline font-medium">
                   Kayıt Ol
                 </button>
               </>
-            ) : (
+            ) : mode === "login" ? null : (
               <>Zaten hesabınız var mı?{" "}
                 <button onClick={() => { setMode("login"); setError(""); setSuccess("") }} className="text-blue-600 hover:underline font-medium">
                   Giriş Yap
