@@ -5,7 +5,6 @@ export const dynamic = "force-dynamic"
 import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { completeAuthFromUrlHash } from "@/lib/auth-hash-recovery"
-import { getAuthCallbackUrl } from "@/lib/auth-redirect"
 import { setAuthSessionCookie } from "@/lib/auth-session-cookie"
 import { supabase } from "@/lib/supabase-client"
 import { Button } from "@/components/ui/button"
@@ -145,38 +144,35 @@ function LoginForm() {
     }
 
     // Phone verified, now create the account
-    const fullPhone = cleaned.length === 10 ? `+90${cleaned}` : cleaned.length === 12 ? `+${cleaned}` : `+90${cleaned}`
-    const { data: signUpData, error: sbError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName.trim(), phone: fullPhone },
-        emailRedirectTo: getAuthCallbackUrl(),
-      },
+    const regRes = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, fullName: fullName.trim(), phone: cleaned }),
     })
-    setLoading(false)
+    const regData = await regRes.json()
 
-    if (sbError) {
-      if (sbError.message.includes("already registered") || sbError.message.includes("already exists")) {
-        setError("Bu e-posta adresi zaten kayıtlı. Lütfen giriş yapın.")
-      } else if (sbError.message.includes("Database")) {
-        setError("Hesap oluşturulurken bir hata oluştu. Lütfen farklı bir e-posta adresi deneyin veya destek ile iletişime geçin.")
-      } else {
-        setError("Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.")
-      }
+    if (!regData.ok) {
+      setLoading(false)
+      setError(regData.error || "Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.")
       return
     }
 
-    if (signUpData.session) {
+    const { data: signInData, error: sbError } = await supabase.auth.signInWithPassword({ email, password })
+    setLoading(false)
+
+    if (sbError) {
+      setError(sbError.message || "Giriş yapılamadı. Lütfen giriş sayfasından deneyin.")
+      return
+    }
+
+    if (signInData.session) {
+      setAuthSessionCookie(true)
       router.push("/hesabim/plan-sec")
       router.refresh()
       return
     }
 
-    setSuccess(
-      "Kayıt başarılı! E-postanıza bir doğrulama bağlantısı gönderildi. " +
-      "E-postanızı kontrol edip bağlantıya tıkladıktan sonra giriş yapabilirsiniz."
-    )
+    setSuccess("Kayıt başarılı! Giriş yapabilirsiniz.")
     setMode("login")
     setStep("form")
   }
