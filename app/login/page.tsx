@@ -87,10 +87,7 @@ function LoginForm() {
     if (!email || !password) { setError("E-posta ve şifre zorunludur."); return }
     setError(""); setLoading(true)
 
-    const { data, error: sbError } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    })
+    const { data, error: sbError } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
 
     if (sbError) {
@@ -107,17 +104,7 @@ function LoginForm() {
     if (data.session) {
       setAuthSessionCookie(true)
       const next = searchParams.get("next")
-      if (next && next.startsWith("/")) {
-        router.push(next)
-      } else {
-        const { data: adminRow } = await supabase
-          .from("admin_users")
-          .select("id")
-          .eq("user_id", data.session.user.id)
-          .eq("is_active", true)
-          .maybeSingle()
-        router.push(adminRow ? "/admin" : "/randevular/takvim")
-      }
+      router.push(next && next.startsWith("/") ? next : "/randevular/takvim")
       router.refresh()
     }
   }
