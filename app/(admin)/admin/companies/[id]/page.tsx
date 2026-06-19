@@ -35,7 +35,7 @@ interface CompanyDetail {
   city: string | null
   currency: string
   service_type: string
-  is_active: boolean
+  is_active?: boolean
   created_at: string
   organization_id: string
 }
@@ -266,7 +266,7 @@ export default function CompanyDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {company.is_active ? (
+          {(company.is_active ?? true) ? (
             <Badge variant="success">Aktif</Badge>
           ) : (
             <Badge variant="destructive">Pasif</Badge>

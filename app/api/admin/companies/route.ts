@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("companies")
-    .select("id, name, phone, email, organization_id, service_type, is_active, created_at, organizations(id, name)", { count: "exact" })
+    .select("id, name, phone, email, organization_id, service_type, created_at, organizations(id, name)", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1)
 
@@ -141,7 +141,6 @@ export async function POST(req: NextRequest) {
         email: email || "",
         service_type: service_type || "beauty_salon",
         organization_id,
-        is_active: true,
         currency: "TRY",
       })
       .select()

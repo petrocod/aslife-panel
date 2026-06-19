@@ -89,7 +89,6 @@ export async function provisionNewTenant(
       email: input.email?.trim() || ownerEmail || "",
       service_type: input.service_type || "beauty_salon",
       organization_id: org.id,
-      is_active: true,
       currency: "TRY",
     })
     .select("id")

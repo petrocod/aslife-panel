@@ -47,7 +47,7 @@ interface Company {
   email: string
   currency: string
   service_type: string
-  is_active: boolean
+  is_active?: boolean
   created_at: string
   organization_id: string
   organization: { id: string; name: string; slug: string } | null
@@ -369,7 +369,7 @@ export default function AdminCompaniesPage() {
                       <PlanBadge sub={c.subscription} />
                     </td>
                     <td className="py-3 px-4 text-center">
-                      {c.is_active ? (
+                      {(c.is_active ?? true) ? (
                         <span className="inline-flex items-center gap-1">
                           <span className="h-2 w-2 rounded-full bg-emerald-500" />
                           <span className="text-xs text-emerald-700">
