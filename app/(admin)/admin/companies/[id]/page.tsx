@@ -425,6 +425,15 @@ export default function CompanyDetailPage() {
 
         {/* Users Tab */}
         <TabsContent value="users">
+          <div className="mb-3 flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => router.push(`/admin/users?companyId=${companyId}`)}
+            >
+              <UserCircle className="h-4 w-4 mr-2" />
+              Kullanıcı Ekle
+            </Button>
+          </div>
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             {profiles.length === 0 ? (
               <div className="py-16 text-center">

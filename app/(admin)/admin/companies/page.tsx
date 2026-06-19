@@ -13,13 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { cn, formatDate } from "@/lib/utils"
 import {
   Search,
@@ -33,7 +26,19 @@ import {
   LogIn,
   CreditCard,
   Users,
+  Plus,
+  Copy,
+  CheckCircle,
 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 
 interface Company {
   id: string
@@ -55,9 +60,10 @@ interface Company {
   } | null
 }
 
-interface OrgOption {
-  id: string
-  name: string
+interface CreateResult {
+  companyId: string
+  ownerTempPassword?: string
+  ownerEmail?: string
 }
 
 interface ApiResponse {
@@ -117,8 +123,17 @@ export default function AdminCompaniesPage() {
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [page, setPage] = useState(1)
-  const [orgFilter, setOrgFilter] = useState<string>("all")
-  const [orgs, setOrgs] = useState<OrgOption[]>([])
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState("")
+  const [createResult, setCreateResult] = useState<CreateResult | null>(null)
+  const [formName, setFormName] = useState("")
+  const [formPhone, setFormPhone] = useState("")
+  const [formEmail, setFormEmail] = useState("")
+  const [formServiceType, setFormServiceType] = useState("beauty_salon")
+  const [formOwnerEmail, setFormOwnerEmail] = useState("")
+  const [formOwnerName, setFormOwnerName] = useState("")
+  const [formOwnerPhone, setFormOwnerPhone] = useState("")
   const limit = 20
 
   useEffect(() => {
@@ -128,28 +143,6 @@ export default function AdminCompaniesPage() {
     }, 400)
     return () => clearTimeout(t)
   }, [search])
-
-  useEffect(() => {
-    async function loadOrgs() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) return
-      const res = await fetch("/api/admin/organizations?limit=100", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      if (res.ok) {
-        const json = await res.json()
-        setOrgs(
-          json.organizations.map((o: { id: string; name: string }) => ({
-            id: o.id,
-            name: o.name,
-          }))
-        )
-      }
-    }
-    loadOrgs()
-  }, [])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -163,7 +156,6 @@ export default function AdminCompaniesPage() {
         limit: String(limit),
       })
       if (debouncedSearch) params.set("search", debouncedSearch)
-      if (orgFilter && orgFilter !== "all") params.set("org_id", orgFilter)
 
       const res = await fetch(`/api/admin/companies?${params}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -176,11 +168,67 @@ export default function AdminCompaniesPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, debouncedSearch, orgFilter])
+  }, [page, debouncedSearch])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  function resetCreateForm() {
+    setFormName("")
+    setFormPhone("")
+    setFormEmail("")
+    setFormServiceType("beauty_salon")
+    setFormOwnerEmail("")
+    setFormOwnerName("")
+    setFormOwnerPhone("")
+    setCreateError("")
+    setCreateResult(null)
+  }
+
+  async function handleCreateTenant() {
+    if (!formName.trim()) {
+      setCreateError("Müşteri adı zorunludur.")
+      return
+    }
+    setCreating(true)
+    setCreateError("")
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (!session) return
+      const res = await fetch("/api/admin/companies", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          name: formName.trim(),
+          phone: formPhone.trim(),
+          email: formEmail.trim(),
+          service_type: formServiceType.trim() || "beauty_salon",
+          owner_email: formOwnerEmail.trim() || undefined,
+          owner_full_name: formOwnerName.trim() || undefined,
+          owner_phone: formOwnerPhone.trim() || undefined,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setCreateError(json.error || "Oluşturulamadı.")
+        return
+      }
+      setCreateResult({
+        companyId: json.company?.id,
+        ownerTempPassword: json.ownerTempPassword,
+        ownerEmail: formOwnerEmail.trim() || undefined,
+      })
+      await fetchData()
+    } finally {
+      setCreating(false)
+    }
+  }
 
   function handleLoginAs(companyId: string) {
     alert(`Login as company: ${companyId} — Bu özellik henüz aktif değil.`)
@@ -190,12 +238,16 @@ export default function AdminCompaniesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Şirketler</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Müşteriler</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Tüm şirketleri, aboneliklerini ve sahiplerini görüntüleyin
+            Müşteri hesaplarını ve giriş kullanıcılarını yönetin
           </p>
         </div>
-        <Button
+        <div className="flex items-center gap-2">
+          <Button onClick={() => { resetCreateForm(); setCreateOpen(true) }} className="gap-1">
+            <Plus className="h-4 w-4" /> Yeni Müşteri
+          </Button>
+          <Button
           variant="ghost"
           size="sm"
           onClick={fetchData}
@@ -206,6 +258,7 @@ export default function AdminCompaniesPage() {
           />
           Yenile
         </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -218,28 +271,9 @@ export default function AdminCompaniesPage() {
             className="pl-10 border-slate-200"
           />
         </div>
-        <Select
-          value={orgFilter}
-          onValueChange={(v) => {
-            setOrgFilter(v)
-            setPage(1)
-          }}
-        >
-          <SelectTrigger className="w-[220px] border-slate-200">
-            <SelectValue placeholder="Organizasyon filtrele" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tüm Organizasyonlar</SelectItem>
-            {orgs.map((o) => (
-              <SelectItem key={o.id} value={o.id}>
-                {o.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         {data && (
           <span className="text-sm text-slate-500">
-            Toplam {data.total} şirket
+            Toplam {data.total} müşteri
           </span>
         )}
       </div>
@@ -250,13 +284,10 @@ export default function AdminCompaniesPage() {
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
                 <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Şirket Adı
+                  Müşteri
                 </th>
                 <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Organizasyon
-                </th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
-                  Sahip
+                  Sahip / Giriş
                 </th>
                 <th className="text-center py-3 px-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Müşteri Sayısı
@@ -278,7 +309,7 @@ export default function AdminCompaniesPage() {
             <tbody>
               {loading && !data ? (
                 <tr>
-                  <td colSpan={8} className="py-20 text-center">
+                  <td colSpan={7} className="py-20 text-center">
                     <Loader2 className="h-6 w-6 animate-spin text-slate-400 mx-auto" />
                     <p className="text-sm text-slate-500 mt-2">
                       Yükleniyor...
@@ -287,7 +318,7 @@ export default function AdminCompaniesPage() {
                 </tr>
               ) : !data?.companies?.length ? (
                 <tr>
-                  <td colSpan={8} className="py-20 text-center">
+                  <td colSpan={7} className="py-20 text-center">
                     <Store className="h-8 w-8 text-slate-300 mx-auto" />
                     <p className="text-sm text-slate-500 mt-2">
                       Şirket bulunamadı
@@ -322,24 +353,11 @@ export default function AdminCompaniesPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-4">
-                      {c.organization ? (
-                        <button
-                          onClick={() =>
-                            router.push(
-                              `/admin/organizations/${c.organization!.id}`
-                            )
-                          }
-                          className="text-slate-700 hover:text-violet-600 transition-colors"
-                        >
-                          {c.organization.name}
-                        </button>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
                     <td className="py-3 px-4 text-slate-700">
-                      {c.owner?.full_name || "—"}
+                      <div>{c.owner?.full_name || "—"}</div>
+                      {c.email && (
+                        <p className="text-xs text-slate-500">{c.email}</p>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="inline-flex items-center gap-1 text-slate-700">
@@ -394,6 +412,14 @@ export default function AdminCompaniesPage() {
                             <LogIn className="h-4 w-4 mr-2" />
                             Olarak Giriş Yap
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              router.push(`/admin/users?companyId=${c.id}`)
+                            }
+                          >
+                            <Users className="h-4 w-4 mr-2" />
+                            Kullanıcılar
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() =>
@@ -445,6 +471,118 @@ export default function AdminCompaniesPage() {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetCreateForm()
+            setCreateOpen(false)
+          } else {
+            setCreateOpen(true)
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Yeni Müşteri</DialogTitle>
+            <DialogDescription>
+              Müşteri kaydı ve isteğe bağlı ilk giriş kullanıcısı oluşturulur. Kullanıcı şifresini
+              profilinden veya &quot;Şifremi Unuttum&quot; ile değiştirir.
+            </DialogDescription>
+          </DialogHeader>
+
+          {createResult ? (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
+                <CheckCircle className="h-5 w-5 shrink-0" />
+                Müşteri oluşturuldu.
+              </div>
+              {createResult.ownerEmail && createResult.ownerTempPassword && (
+                <div className="bg-slate-50 border rounded-lg p-4 space-y-2 text-sm">
+                  <p className="font-medium text-slate-800">Giriş bilgileri (müşteriye gönderin)</p>
+                  <p>
+                    <span className="text-slate-500">E-posta:</span>{" "}
+                    <span className="font-mono">{createResult.ownerEmail}</span>
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="text-slate-500">Geçici şifre:</span>
+                    <span className="font-mono font-medium">{createResult.ownerTempPassword}</span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() =>
+                        void navigator.clipboard.writeText(createResult.ownerTempPassword || "")
+                      }
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </p>
+                </div>
+              )}
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    router.push(`/admin/companies/${createResult.companyId}`)
+                    resetCreateForm()
+                    setCreateOpen(false)
+                  }}
+                >
+                  Detaya Git
+                </Button>
+                <Button variant="outline" onClick={() => { resetCreateForm(); setCreateOpen(false) }}>
+                  Kapat
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 py-2">
+                <div>
+                  <Label>Müşteri / işletme adı *</Label>
+                  <Input className="mt-1" value={formName} onChange={(e) => setFormName(e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Telefon</Label>
+                    <Input className="mt-1" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>E-posta (işletme)</Label>
+                    <Input className="mt-1" type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)} />
+                  </div>
+                </div>
+                <div className="border-t pt-3 mt-1">
+                  <p className="text-sm font-medium text-slate-700 mb-2">İlk giriş kullanıcısı (opsiyonel)</p>
+                  <div className="grid gap-3">
+                    <div>
+                      <Label>E-posta (giriş) *</Label>
+                      <Input className="mt-1" type="email" value={formOwnerEmail} onChange={(e) => setFormOwnerEmail(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Ad Soyad</Label>
+                      <Input className="mt-1" value={formOwnerName} onChange={(e) => setFormOwnerName(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+                {createError && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    {createError}
+                  </p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>İptal</Button>
+                <Button onClick={() => void handleCreateTenant()} disabled={creating}>
+                  {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Oluştur
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

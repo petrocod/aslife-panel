@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyAdmin } from "@/lib/admin-auth"
+import { provisionNewTenant } from "@/lib/admin-provision-tenant"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export async function GET(req: NextRequest) {
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("companies")
-    .select("id, name, phone, email, organization_id, service_type, created_at, organizations(id, name)", { count: "exact" })
+    .select("id, name, phone, email, organization_id, service_type, is_active, created_at, organizations(id, name)", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1)
 
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
       ])
       return {
         ...c,
-        customerCount: customerCount.count || 0,
+        customers_count: customerCount.count || 0,
         owner: owner.data || null,
         subscription: sub.data || null,
       }
@@ -55,10 +56,50 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const admin = await verifyAdmin(req)
   if (!admin) return NextResponse.json({ error: "Yetkisiz" }, { status: 403 })
+  if (admin.role !== "super_admin") {
+    return NextResponse.json(
+      { error: "Müşteri oluşturma yalnızca super_admin tarafından yapılabilir." },
+      { status: 403 }
+    )
+  }
 
   try {
     const body = await req.json()
-    const { name, phone, email, service_type, organization_id } = body
+    const {
+      name,
+      phone,
+      email,
+      service_type,
+      organization_id,
+      owner_email,
+      owner_full_name,
+      owner_phone,
+    } = body
+
+    const supabase = getSupabaseAdmin()
+
+    if (!organization_id) {
+      const result = await provisionNewTenant(supabase, {
+        name,
+        phone,
+        email,
+        service_type,
+        owner_email,
+        owner_full_name,
+        owner_phone,
+      })
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 400 })
+      }
+      return NextResponse.json(
+        {
+          company: { id: result.companyId, organization_id: result.organizationId, name },
+          ownerUserId: result.ownerUserId,
+          ownerTempPassword: result.ownerTempPassword,
+        },
+        { status: 201 }
+      )
+    }
 
     if (!name || !organization_id) {
       return NextResponse.json(

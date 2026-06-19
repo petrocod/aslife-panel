@@ -5,7 +5,6 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
-  Building2,
   Store,
   Users,
   CreditCard,
@@ -30,8 +29,7 @@ interface AdminNavItem {
 
 const adminNavItems: AdminNavItem[] = [
   { label: "Dashboard", href: "/admin", icon: <LayoutDashboard className="h-4 w-4" /> },
-  { label: "Organizasyonlar", href: "/admin/organizations", icon: <Building2 className="h-4 w-4" /> },
-  { label: "Şirketler", href: "/admin/companies", icon: <Store className="h-4 w-4" /> },
+  { label: "Müşteriler", href: "/admin/companies", icon: <Store className="h-4 w-4" /> },
   { label: "Kullanıcılar", href: "/admin/users", icon: <Users className="h-4 w-4" /> },
   { label: "Abonelikler", href: "/admin/subscriptions", icon: <CreditCard className="h-4 w-4" /> },
   { label: "Fiyatlandırma", href: "/admin/pricing", icon: <Tags className="h-4 w-4" /> },

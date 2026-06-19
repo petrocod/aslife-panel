@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import {
   Search,
   MoreHorizontal,
@@ -8,7 +9,6 @@ import {
   ChevronRight,
   Users,
   Eye,
-  KeyRound,
   Ban,
   Trash2,
   Loader2,
@@ -63,6 +63,22 @@ const ROLE_BADGE: Record<string, { label: string; variant: "info" | "success" | 
 const LIMIT = 20
 
 export default function AdminUsersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <AdminUsersContent />
+    </Suspense>
+  )
+}
+
+function AdminUsersContent() {
+  const searchParams = useSearchParams()
+  const presetCompanyId = searchParams.get("companyId") || ""
   const [users, setUsers] = useState<UserRow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -181,6 +197,13 @@ export default function AdminUsersPage() {
     }
   }
 
+  useEffect(() => {
+    if (!presetCompanyId) return
+    setNewCompanyId(presetCompanyId)
+    setCreateDialog(true)
+    void loadCompanies()
+  }, [presetCompanyId])
+
   async function handleCreateUser() {
     if (!newEmail || !newCompanyId) return
     setCreating(true)
@@ -253,7 +276,6 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3 text-left font-medium">E-posta</th>
                 <th className="px-4 py-3 text-left font-medium">Telefon</th>
                 <th className="px-4 py-3 text-left font-medium">Şirket</th>
-                <th className="px-4 py-3 text-left font-medium">Organizasyon</th>
                 <th className="px-4 py-3 text-left font-medium">Rol</th>
                 <th className="px-4 py-3 text-left font-medium">Durum</th>
                 <th className="px-4 py-3 text-left font-medium">Kayıt Tarihi</th>
@@ -263,7 +285,7 @@ export default function AdminUsersPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center">
+                  <td colSpan={8} className="py-12 text-center">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
                     <p className="mt-2 text-muted-foreground">Yükleniyor...</p>
                   </td>
@@ -283,7 +305,6 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-3 text-muted-foreground">{user.email || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{user.phone || "—"}</td>
                       <td className="px-4 py-3">{user.companies?.name || "—"}</td>
-                      <td className="px-4 py-3">{user.organizations?.name || "—"}</td>
                       <td className="px-4 py-3">
                         <Badge variant={roleMeta.variant}>{roleMeta.label}</Badge>
                       </td>
@@ -308,19 +329,6 @@ export default function AdminUsersPage() {
                             >
                               <Eye className="mr-2 h-4 w-4" />
                               Detay
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openConfirm(
-                                  user.id,
-                                  "reset_password",
-                                  "Şifre Sıfırla",
-                                  `${user.full_name || user.email} kullanıcısının şifresini sıfırlamak istediğinize emin misiniz?`
-                                )
-                              }
-                            >
-                              <KeyRound className="mr-2 h-4 w-4" />
-                              Şifre Sıfırla
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {user.is_active ? (
@@ -451,7 +459,6 @@ export default function AdminUsersPage() {
               <Row label="E-posta" value={detailDialog.user.email} />
               <Row label="Telefon" value={detailDialog.user.phone} />
               <Row label="Şirket" value={detailDialog.user.companies?.name} />
-              <Row label="Organizasyon" value={detailDialog.user.organizations?.name} />
               <Row
                 label="Rol"
                 value={ROLE_BADGE[detailDialog.user.role || "member"]?.label || detailDialog.user.role}
@@ -470,7 +477,7 @@ export default function AdminUsersPage() {
           <DialogHeader>
             <DialogTitle>Yeni Kullanıcı Oluştur</DialogTitle>
             <DialogDescription>
-              Müşteriye gönderilmek üzere yeni bir kullanıcı hesabı oluşturun.
+              Giriş hesabı oluşturun. Kullanıcı şifresini Hesabım → Profil veya Şifremi Unuttum ile kendisi değiştirir.
             </DialogDescription>
           </DialogHeader>
 
@@ -481,7 +488,9 @@ export default function AdminUsersPage() {
                   <CheckCircle className="h-5 w-5 text-emerald-600" />
                   <p className="font-medium text-emerald-800">Kullanıcı başarıyla oluşturuldu!</p>
                 </div>
-                <p className="text-sm text-emerald-700 mb-3">Aşağıdaki bilgileri müşteriye gönderin:</p>
+                <p className="text-sm text-emerald-700 mb-3">
+                  Aşağıdaki geçici şifreyi müşteriye gönderin. İlk girişten sonra profilden değiştirebilir.
+                </p>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between bg-white rounded px-3 py-2">
                     <span className="text-slate-600">E-posta:</span>
