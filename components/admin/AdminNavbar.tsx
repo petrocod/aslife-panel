@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { LogOut, ChevronDown } from "lucide-react"
+import { LogOut, ChevronDown, Settings } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -14,9 +14,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { setAuthSessionCookie } from "@/lib/auth-session-cookie"
 import { supabase } from "@/lib/supabase-client"
+import { useAdmin } from "@/hooks/useAdmin"
 
 export function AdminNavbar() {
   const router = useRouter()
+  const { adminRole } = useAdmin()
   const [userName, setUserName] = useState("")
   const [userEmail, setUserEmail] = useState("")
   const [userInitials, setUserInitials] = useState("A")
@@ -55,7 +57,7 @@ export function AdminNavbar() {
             Admin Panel
           </h1>
           <span className="hidden sm:inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-600 ring-1 ring-inset ring-orange-200">
-            SUPER ADMIN
+            {(adminRole || "admin").replace("_", " ").toUpperCase()}
           </span>
         </div>
 
@@ -85,6 +87,10 @@ export function AdminNavbar() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer" onClick={() => router.push("/admin/settings")}>
+                <Settings className="h-4 w-4 mr-2" />
+                Ayarlar & Şifre
+              </DropdownMenuItem>
               <DropdownMenuItem className="text-red-600 cursor-pointer" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Çıkış Yap

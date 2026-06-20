@@ -1,44 +1,24 @@
 import { NextRequest, NextResponse } from "next/server"
-import nodemailer from "nodemailer"
+import { notifyAdminsNewTicket } from "@/lib/support-notifications"
 
-const ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL || "support@inasistan.com"
-
+/** @deprecated Prefer POST /api/support/tickets which creates ticket + sends email */
 export async function POST(req: NextRequest) {
   try {
-    const { subject, priority, companyName, userName } = await req.json()
+    const { ticketId, subject, priority, companyName, userName, userEmail, firstMessage } =
+      await req.json()
 
-    const smtpHost = process.env.SMTP_HOST
-    const smtpPort = parseInt(process.env.SMTP_PORT || "587")
-    const smtpUser = process.env.SMTP_USER
-    const smtpPass = process.env.SMTP_PASS
-
-    if (!smtpHost || !smtpUser || !smtpPass) {
-      return NextResponse.json({ ok: false, error: "SMTP not configured" }, { status: 500 })
+    if (!ticketId || !subject) {
+      return NextResponse.json({ ok: false, error: "ticketId and subject required" }, { status: 400 })
     }
 
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465,
-      auth: { user: smtpUser, pass: smtpPass },
-    })
-
-    const priorityLabel = priority === "urgent" ? "ACİL" : priority === "high" ? "YÜKSEK" : ""
-    const subjectLine = `[Destek${priorityLabel ? ` - ${priorityLabel}` : ""}] ${subject}`
-
-    await transporter.sendMail({
-      from: `"aSistan Destek" <${smtpUser}>`,
-      to: ADMIN_EMAIL,
-      subject: subjectLine,
-      html: `
-        <h3>Yeni Destek Talebi</h3>
-        <p><strong>Konu:</strong> ${subject}</p>
-        <p><strong>Öncelik:</strong> ${priority}</p>
-        <p><strong>Şirket:</strong> ${companyName || "—"}</p>
-        <p><strong>Kullanıcı:</strong> ${userName || "—"}</p>
-        <hr/>
-        <p><a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}">Panele Git</a></p>
-      `,
+    await notifyAdminsNewTicket({
+      ticketId,
+      subject,
+      priority: priority || "normal",
+      companyName: companyName || "—",
+      userName: userName || "—",
+      userEmail: userEmail || "",
+      firstMessage: firstMessage || "",
     })
 
     return NextResponse.json({ ok: true })

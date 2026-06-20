@@ -25,6 +25,7 @@ export async function fulfillCartItems(
         .update({
           plan_id: item.productKey,
           status: "active",
+          trial_ends_at: null,
           current_period_end: new Date(Date.now() + periodMs).toISOString(),
           updated_at: new Date().toISOString(),
         })

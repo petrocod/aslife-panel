@@ -107,6 +107,7 @@ export function buildOtpEmail(code: string): EmailMessage & { subject: string; h
 }
 
 export function buildTicketNotificationEmail(ticketSubject: string, ticketId: string): EmailMessage & { subject: string; html: string } {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
   return {
     to: "",
     subject: `aSistan Destek - Yeni yanıt: ${ticketSubject}`,
@@ -114,9 +115,43 @@ export function buildTicketNotificationEmail(ticketSubject: string, ticketId: st
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
         <h2 style="color:#1e293b">Destek Talebinize Yanıt Geldi</h2>
         <p style="color:#64748b">"${ticketSubject}" konulu talebinize yeni bir yanıt verildi.</p>
-        <a href="${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/destek?ticket=${ticketId}"
+        <a href="${baseUrl}/destek?ticket=${ticketId}"
            style="display:inline-block;background:#2563eb;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:16px">
           Yanıtı Görüntüle
+        </a>
+      </div>
+    `,
+  }
+}
+
+export function buildNewTicketAdminEmail(params: {
+  ticketId: string
+  subject: string
+  priority: string
+  companyName: string
+  userName: string
+  userEmail: string
+  firstMessage: string
+}): EmailMessage & { subject: string; html: string } {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  const priorityLabel =
+    params.priority === "urgent" ? "ACİL" : params.priority === "high" ? "YÜKSEK" : params.priority
+  const adminUrl = `${baseUrl}/admin/tickets/${params.ticketId}`
+
+  return {
+    to: "",
+    subject: `[Destek${priorityLabel === "ACİL" || priorityLabel === "YÜKSEK" ? ` - ${priorityLabel}` : ""}] ${params.subject}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px">
+        <h2 style="color:#1e293b">Yeni Destek Talebi</h2>
+        <p style="color:#64748b"><strong>Konu:</strong> ${params.subject}</p>
+        <p style="color:#64748b"><strong>Öncelik:</strong> ${priorityLabel}</p>
+        <p style="color:#64748b"><strong>Şirket:</strong> ${params.companyName}</p>
+        <p style="color:#64748b"><strong>Kullanıcı:</strong> ${params.userName}${params.userEmail ? ` (${params.userEmail})` : ""}</p>
+        <div style="background:#f8fafc;border-radius:8px;padding:16px;margin:16px 0;color:#334155;white-space:pre-wrap">${params.firstMessage}</div>
+        <a href="${adminUrl}"
+           style="display:inline-block;background:#ea580c;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:8px">
+          Admin Panelde Görüntüle
         </a>
       </div>
     `,

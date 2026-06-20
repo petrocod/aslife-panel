@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifyUserBearer } from "@/lib/sms-route-auth"
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
-async function verifyAdmin(req: NextRequest) {
-  const userResult = await verifyUserBearer(req)
-  if (!userResult.ok) return null
-  const supabase = getSupabaseAdmin()
-  const { data } = await supabase
-    .from("admin_users")
-    .select("id, role")
-    .eq("user_id", userResult.userId)
-    .eq("is_active", true)
-    .single()
-  if (!data) return null
-  return { userId: userResult.userId, adminId: data.id, role: data.role }
-}
+import {
+  assignCompanySubscription,
+  enrichSubscriptions,
+  loadSubscriptionPlans,
+} from "@/lib/admin-subscription-service"
+import { verifyAdmin, logAdminAction } from "@/lib/admin-auth"
+import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export async function GET(req: NextRequest) {
   try {
@@ -36,53 +28,84 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .from("company_subscriptions")
       .select(
-        `
-        id,
-        company_id,
-        plan_id,
-        status,
-        trial_ends_at,
-        current_period_end,
-        cancel_at_period_end,
-        mrr,
-        created_at,
-        updated_at,
-        companies(id, name),
-        subscription_plans(id, name_tr, monthly_price)
-      `,
+        "id, company_id, plan_id, status, trial_ends_at, current_period_end, created_at, updated_at, organization_id",
         { count: "exact" }
       )
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1)
 
-    if (status) {
-      query = query.eq("status", status)
-    }
-    if (plan) {
-      query = query.eq("plan_id", plan)
-    }
-    if (companyId) {
-      query = query.eq("company_id", companyId)
-    }
+    if (status) query = query.eq("status", status)
+    if (plan) query = query.eq("plan_id", plan)
+    if (companyId) query = query.eq("company_id", companyId)
 
     const { data, error, count } = await query
-
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const { data: plans } = await supabase
-      .from("subscription_plans")
-      .select("id, name_tr, monthly_price")
-      .order("sort_order", { ascending: true })
+    const plans = await loadSubscriptionPlans(supabase)
+    const subscriptions = await enrichSubscriptions(supabase, data || [])
 
     return NextResponse.json({
-      subscriptions: data || [],
-      plans: plans || [],
+      subscriptions,
+      plans,
       total: count || 0,
       page,
       limit,
       totalPages: Math.ceil((count || 0) / limit),
+    })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Bilinmeyen hata"
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const admin = await verifyAdmin(req)
+    if (!admin) {
+      return NextResponse.json({ error: "Yetkisiz erişim." }, { status: 403 })
+    }
+
+    const body = await req.json()
+    const companyId = String(body.companyId || "").trim()
+    const planId = String(body.planId || "").trim()
+    const status = (body.status || "active") as "trialing" | "active" | "canceled" | "past_due"
+    const billing = (body.billing || "monthly") as "monthly" | "yearly"
+    const trialDays = parseInt(String(body.trialDays || "14"), 10)
+
+    if (!companyId || !planId) {
+      return NextResponse.json({ error: "companyId ve planId zorunludur." }, { status: 400 })
+    }
+
+    const supabase = getSupabaseAdmin()
+    const result = await assignCompanySubscription(supabase, {
+      companyId,
+      planId,
+      status,
+      billing,
+      trialDays,
+    })
+
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+
+    await logAdminAction(
+      admin.adminId,
+      "subscription_assigned",
+      "company",
+      companyId,
+      { planId, status, billing },
+      admin.email
+    )
+
+    const [enriched] = await enrichSubscriptions(supabase, [result.subscription])
+
+    return NextResponse.json({
+      ok: true,
+      subscription: enriched,
+      message: "Abonelik atandı.",
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Bilinmeyen hata"
@@ -106,43 +129,40 @@ export async function PATCH(req: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    if (action === "change_plan") {
-      const { newPlanId } = body
+    if (action === "change_plan" || action === "assign") {
+      const newPlanId = body.newPlanId || body.planId
+      const billing = (body.billing || "monthly") as "monthly" | "yearly"
       if (!newPlanId) {
         return NextResponse.json({ error: "newPlanId zorunludur." }, { status: 400 })
       }
 
-      const { data: plan } = await supabase
-        .from("subscription_plans")
-        .select("id, monthly_price")
-        .eq("id", newPlanId)
+      const { data: sub } = await supabase
+        .from("company_subscriptions")
+        .select("company_id, status")
+        .eq("id", subscriptionId)
         .single()
 
-      if (!plan) {
-        return NextResponse.json({ error: "Plan bulunamadı." }, { status: 404 })
+      if (!sub) {
+        return NextResponse.json({ error: "Abonelik bulunamadı." }, { status: 404 })
       }
 
-      const { error } = await supabase
-        .from("company_subscriptions")
-        .update({
-          plan_id: newPlanId,
-          mrr: plan.monthly_price || 0,
-          status: "active",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", subscriptionId)
+      const result = await assignCompanySubscription(supabase, {
+        companyId: sub.company_id,
+        planId: newPlanId,
+        status: body.status || sub.status || "active",
+        billing,
+        trialDays: body.trialDays,
+      })
 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 500 })
       }
 
-      return NextResponse.json({ ok: true, message: "Plan değiştirildi." })
+      return NextResponse.json({ ok: true, message: "Plan güncellendi." })
     }
 
     if (action === "extend_trial") {
-      const { days } = body
-      const extendDays = parseInt(days || "7", 10)
-
+      const extendDays = parseInt(body.days || "7", 10)
       const { data: sub } = await supabase
         .from("company_subscriptions")
         .select("trial_ends_at")
@@ -165,10 +185,7 @@ export async function PATCH(req: NextRequest) {
         })
         .eq("id", subscriptionId)
 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
-
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ ok: true, message: `Trial ${extendDays} gün uzatıldı.` })
     }
 
@@ -177,30 +194,35 @@ export async function PATCH(req: NextRequest) {
         .from("company_subscriptions")
         .update({
           status: "canceled",
-          cancel_at_period_end: true,
           updated_at: new Date().toISOString(),
         })
         .eq("id", subscriptionId)
 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
-
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ ok: true, message: "Abonelik iptal edildi." })
     }
 
     if (action === "reactivate") {
-      const { error } = await supabase
+      const billing = (body.billing || "monthly") as "monthly" | "yearly"
+      const { data: sub } = await supabase
         .from("company_subscriptions")
-        .update({
-          status: "active",
-          cancel_at_period_end: false,
-          updated_at: new Date().toISOString(),
-        })
+        .select("company_id, plan_id")
         .eq("id", subscriptionId)
+        .single()
 
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
+      if (!sub) {
+        return NextResponse.json({ error: "Abonelik bulunamadı." }, { status: 404 })
+      }
+
+      const result = await assignCompanySubscription(supabase, {
+        companyId: sub.company_id,
+        planId: sub.plan_id,
+        status: "active",
+        billing,
+      })
+
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 500 })
       }
 
       return NextResponse.json({ ok: true, message: "Abonelik yeniden aktifleştirildi." })

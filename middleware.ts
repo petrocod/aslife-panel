@@ -30,7 +30,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const loggedIn = hasSupabaseSession(request)
 
-  if (pathname === "/" && loggedIn) {
+  if (pathname === "/" && loggedIn && process.env.NODE_ENV === "production") {
     const url = request.nextUrl.clone()
     url.pathname = "/dashboard"
     return NextResponse.redirect(url)

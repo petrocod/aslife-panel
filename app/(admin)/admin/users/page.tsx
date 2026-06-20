@@ -18,6 +18,7 @@ import {
   CheckCircle,
   X,
   Store,
+  KeyRound,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabase-client"
@@ -91,6 +92,7 @@ function AdminUsersContent() {
   const [search, setSearch] = useState("")
   const [searchInput, setSearchInput] = useState("")
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
 
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -116,6 +118,13 @@ function AdminUsersContent() {
   const [createResult, setCreateResult] = useState<{ tempPassword: string; message: string } | null>(null)
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([])
 
+  const [passwordDialog, setPasswordDialog] = useState<{
+    open: boolean
+    user: UserRow | null
+    loading: boolean
+    tempPassword: string | null
+  }>({ open: false, user: null, loading: false, tempPassword: null })
+
   const getToken = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token || null
@@ -123,9 +132,13 @@ function AdminUsersContent() {
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
+    setFetchError(null)
     try {
       const token = await getToken()
-      if (!token) return
+      if (!token) {
+        setFetchError("Oturum bulunamadı. Tekrar giriş yapın.")
+        return
+      }
 
       const params = new URLSearchParams({
         page: page.toString(),
@@ -143,6 +156,10 @@ function AdminUsersContent() {
         setUsers(data.users)
         setTotal(data.total)
         setTotalPages(data.totalPages)
+      } else {
+        setUsers([])
+        setTotal(0)
+        setFetchError(data.error || "Kullanıcılar yüklenemedi.")
       }
     } finally {
       setLoading(false)
@@ -164,13 +181,14 @@ function AdminUsersContent() {
       const token = await getToken()
       if (!token) return
 
+      let res: Response
       if (action === "delete") {
-        await fetch(`/api/admin/users/${userId}`, {
+        res = await fetch(`/api/admin/users/${userId}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         })
       } else {
-        await fetch(`/api/admin/users/${userId}`, {
+        res = await fetch(`/api/admin/users/${userId}`, {
           method: "PATCH",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -178,6 +196,12 @@ function AdminUsersContent() {
           },
           body: JSON.stringify({ action, ...extra }),
         })
+      }
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(json.error || "İşlem başarısız.")
+        return
       }
 
       setConfirmDialog((p) => ({ ...p, open: false }))
@@ -258,8 +282,49 @@ function AdminUsersContent() {
   }
 
   function resetCreateDialog() {
-    setNewEmail(""); setNewFullName(""); setNewPhone(""); setNewCompanyId(""); setNewRole("member")
-    setCreateResult(null); setCreateDialog(false)
+    setNewEmail("")
+    setNewFullName("")
+    setNewPhone("")
+    setNewCompanyId(filterCompanyId || "")
+    setNewRole("member")
+    setCreateResult(null)
+    setCreateDialog(false)
+  }
+
+  function openCreateDialog() {
+    setNewCompanyId(filterCompanyId || newCompanyId || "")
+    setCreateDialog(true)
+    void loadCompanies()
+  }
+
+  async function handleResetUserPassword() {
+    if (!passwordDialog.user) return
+    setPasswordDialog((p) => ({ ...p, loading: true }))
+    try {
+      const token = await getToken()
+      if (!token) return
+      const res = await fetch(`/api/admin/users/${passwordDialog.user.id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "set_password" }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        alert(json.error || "Hata oluştu")
+        setPasswordDialog({ open: false, user: null, loading: false, tempPassword: null })
+        return
+      }
+      setPasswordDialog((p) => ({
+        ...p,
+        loading: false,
+        tempPassword: json.tempPassword || null,
+      }))
+    } finally {
+      setPasswordDialog((p) => ({ ...p, loading: false }))
+    }
   }
 
   return (
@@ -320,10 +385,16 @@ function AdminUsersContent() {
         <Button onClick={handleSearch} variant="secondary">
           Ara
         </Button>
-        <Button onClick={() => { setCreateDialog(true); loadCompanies() }} className="gap-1">
+        <Button onClick={openCreateDialog} className="gap-1">
           <UserPlus className="h-4 w-4" /> Yeni Kullanıcı
         </Button>
       </div>
+
+      {fetchError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {fetchError}
+        </div>
+      )}
 
       <div className="rounded-lg border bg-card">
         <div className="overflow-x-auto">
@@ -403,6 +474,19 @@ function AdminUsersContent() {
                             >
                               <Eye className="mr-2 h-4 w-4" />
                               Detay
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setPasswordDialog({
+                                  open: true,
+                                  user,
+                                  loading: false,
+                                  tempPassword: null,
+                                })
+                              }
+                            >
+                              <KeyRound className="mr-2 h-4 w-4" />
+                              Şifre Sıfırla
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {user.is_active ? (
@@ -625,6 +709,56 @@ function AdminUsersContent() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset password dialog */}
+      <Dialog
+        open={passwordDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setPasswordDialog({ open: false, user: null, loading: false, tempPassword: null })
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Kullanıcı Şifresi Sıfırla</DialogTitle>
+            <DialogDescription>
+              {passwordDialog.user?.full_name || passwordDialog.user?.email} için yeni geçici şifre
+              oluşturulacak.
+            </DialogDescription>
+          </DialogHeader>
+          {passwordDialog.tempPassword ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm text-emerald-800 mb-2">Yeni geçici şifre:</p>
+              <div className="flex items-center justify-between bg-white rounded px-3 py-2 font-mono text-sm">
+                {passwordDialog.tempPassword}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  onClick={() => navigator.clipboard.writeText(passwordDialog.tempPassword!)}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() =>
+                setPasswordDialog({ open: false, user: null, loading: false, tempPassword: null })
+              }
+            >
+              {passwordDialog.tempPassword ? "Kapat" : "İptal"}
+            </Button>
+            {!passwordDialog.tempPassword && (
+              <Button onClick={handleResetUserPassword} disabled={passwordDialog.loading}>
+                {passwordDialog.loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Sıfırla
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

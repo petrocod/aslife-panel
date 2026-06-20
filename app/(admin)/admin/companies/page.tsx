@@ -361,8 +361,8 @@ export default function AdminCompaniesPage() {
                     </td>
                     <td className="py-3 px-4 text-slate-700">
                       <div>{c.owner?.full_name || "—"}</div>
-                      {c.email && (
-                        <p className="text-xs text-slate-500">{c.email}</p>
+                      {(c.owner?.email || c.email) && (
+                        <p className="text-xs text-slate-500">{c.owner?.email || c.email}</p>
                       )}
                     </td>
                     <td className="py-3 px-4 text-center">

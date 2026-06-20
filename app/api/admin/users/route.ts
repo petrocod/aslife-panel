@@ -1,21 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifyUserBearer } from "@/lib/sms-route-auth"
-import { getSupabaseAdmin } from "@/lib/supabase-admin"
-import { getAuthCallbackBaseUrl } from "@/lib/auth-redirect"
 
-async function verifyAdmin(req: NextRequest) {
-  const userResult = await verifyUserBearer(req)
-  if (!userResult.ok) return null
-  const supabase = getSupabaseAdmin()
-  const { data } = await supabase
-    .from("admin_users")
-    .select("id, role")
-    .eq("user_id", userResult.userId)
-    .eq("is_active", true)
-    .single()
-  if (!data) return null
-  return { userId: userResult.userId, adminId: data.id, role: data.role }
-}
+import { verifyAdmin } from "@/lib/admin-auth"
+import {
+  enrichAdminUsers,
+  generateTempPassword,
+  PROFILE_COLUMNS,
+  upsertUserProfile,
+} from "@/lib/admin-users-service"
+import { getAuthCallbackBaseUrl } from "@/lib/auth-redirect"
+import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export async function GET(req: NextRequest) {
   try {
@@ -35,23 +28,7 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from("profiles")
-      .select(
-        `
-        id,
-        full_name,
-        email,
-        phone,
-        role,
-        is_active,
-        last_login,
-        created_at,
-        company_id,
-        organization_id,
-        companies!left(id, name),
-        organizations!left(id, name)
-      `,
-        { count: "exact" }
-      )
+      .select(PROFILE_COLUMNS, { count: "exact" })
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -68,8 +45,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    const users = await enrichAdminUsers(supabase, data || [])
+
     return NextResponse.json({
-      users: data || [],
+      users,
       total: count || 0,
       page,
       limit,
@@ -87,12 +66,6 @@ export async function POST(req: NextRequest) {
     if (!admin) {
       return NextResponse.json({ error: "Yetkisiz erişim." }, { status: 403 })
     }
-    if (admin.role !== "super_admin") {
-      return NextResponse.json(
-        { error: "Kullanıcı oluşturma yalnızca super_admin tarafından yapılabilir." },
-        { status: 403 }
-      )
-    }
 
     const body = await req.json()
     const { email, fullName, phone, companyId, role } = body
@@ -102,11 +75,11 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin()
-
-    const tempPassword = Math.random().toString(36).slice(-10) + "A1!"
+    const normalizedEmail = String(email).trim().toLowerCase()
+    const tempPassword = generateTempPassword()
 
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email: String(email).trim().toLowerCase(),
+      email: normalizedEmail,
       password: tempPassword,
       email_confirm: true,
       user_metadata: {
@@ -128,10 +101,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Kullanıcı oluşturulamadı." }, { status: 500 })
     }
 
+    const profileErr = await upsertUserProfile(supabase, {
+      userId: authUser.user.id,
+      email: normalizedEmail,
+      fullName,
+      phone,
+      companyId,
+      role: role || "member",
+    })
+
+    if (profileErr) {
+      await supabase.auth.admin.deleteUser(authUser.user.id)
+      return NextResponse.json({ error: profileErr.message }, { status: 500 })
+    }
+
     const callbackUrl = `${getAuthCallbackBaseUrl()}/auth/callback`
     const { error: resetError } = await supabase.auth.admin.generateLink({
       type: "recovery",
-      email: String(email).trim().toLowerCase(),
+      email: normalizedEmail,
       options: { redirectTo: callbackUrl },
     })
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyUserBearer } from "@/lib/sms-route-auth"
 import { getSupabaseAdmin } from "@/lib/supabase-admin"
+import { notifyUserTicketReply } from "@/lib/support-notifications"
 
 async function verifyAdmin(req: NextRequest) {
   const userResult = await verifyUserBearer(req)
@@ -149,6 +150,28 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   }
 
   await supabase.from("support_tickets").update(ticketUpdates).eq("id", id)
+
+  const { data: ticketMeta } = await supabase
+    .from("support_tickets")
+    .select("subject, user_id")
+    .eq("id", id)
+    .single()
+
+  if (ticketMeta?.user_id) {
+    const { data: userProfile } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", ticketMeta.user_id)
+      .maybeSingle()
+
+    if (userProfile?.email) {
+      void notifyUserTicketReply({
+        to: userProfile.email,
+        ticketId: id,
+        ticketSubject: ticketMeta.subject,
+      })
+    }
+  }
 
   return NextResponse.json(msg, { status: 201 })
 }
