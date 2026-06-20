@@ -283,7 +283,7 @@ export function Sidebar() {
     <aside className="flex flex-col w-[220px] h-screen min-h-0 bg-sidebar text-sidebar-foreground shrink-0">
       {/* Logo — yükseklik üst satır (Navbar ile aynı) */}
       <Link
-        href="/"
+        href="/dashboard"
         className="h-16 min-h-16 shrink-0 flex items-center gap-2.5 px-4 border-b border-sidebar-border hover:opacity-90 transition-opacity"
       >
         <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0 shadow-sm">

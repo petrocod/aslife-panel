@@ -15,7 +15,7 @@ const PUBLIC_PREFIXES = [
 ]
 
 function isPublicPath(pathname: string): boolean {
-  if (pathname === "/") return false
+  if (pathname === "/") return true
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))
 }
 
@@ -28,6 +28,13 @@ function hasSupabaseSession(request: NextRequest): boolean {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const loggedIn = hasSupabaseSession(request)
+
+  if (pathname === "/" && loggedIn) {
+    const url = request.nextUrl.clone()
+    url.pathname = "/dashboard"
+    return NextResponse.redirect(url)
+  }
 
   if (isPublicPath(pathname)) {
     return NextResponse.next()
@@ -40,7 +47,7 @@ export async function middleware(request: NextRequest) {
 
   const isAdmin = pathname.startsWith("/admin")
 
-  if ((isApp || isAdmin) && !hasSupabaseSession(request)) {
+  if ((isApp || isAdmin) && !loggedIn) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
     url.searchParams.set("next", pathname)

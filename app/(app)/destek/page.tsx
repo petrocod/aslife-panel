@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { supabase } from "@/lib/supabase-client"
 import { useCompany } from "@/hooks/useCompany"
+import { DEMO_COMPANY_ID } from "@/lib/demo-limits"
 import {
   Plus,
   Send,
@@ -25,7 +27,7 @@ import {
   Loader2,
   ArrowLeft,
 } from "lucide-react"
-import { computeSlaDueAt, SUPPORT_SLA_HOURS } from "@/lib/support-sla"
+import { SUPPORT_SLA_HOURS } from "@/lib/support-sla"
 
 type Ticket = {
   id: string
@@ -57,8 +59,9 @@ const PRIORITY_MAP: Record<string, { label: string; color: string }> = {
   urgent: { label: "Acil", color: "bg-red-100 text-red-700" },
 }
 
-export default function DestekPage() {
-  const { companyId } = useCompany()
+function DestekPageContent() {
+  const searchParams = useSearchParams()
+  const { companyId, userId } = useCompany()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -67,6 +70,7 @@ export default function DestekPage() {
   const [newMessage, setNewMessage] = useState("")
   const [sending, setSending] = useState(false)
   const [tab, setTab] = useState("tickets")
+  const [createError, setCreateError] = useState("")
 
   // New ticket form
   const [subject, setSubject] = useState("")
@@ -75,10 +79,24 @@ export default function DestekPage() {
   const [creating, setCreating] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const canCreateTicket = Boolean(userId && companyId && companyId !== DEMO_COMPANY_ID)
 
   useEffect(() => {
-    if (companyId) loadTickets()
+    if (companyId && companyId !== DEMO_COMPANY_ID) loadTickets()
+    else {
+      setTickets([])
+      setLoading(false)
+    }
   }, [companyId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const ticketId = searchParams.get("ticket")
+    if (!ticketId || loading || tickets.length === 0) return
+    const ticket = tickets.find((t) => t.id === ticketId)
+    if (ticket && selectedTicket?.id !== ticket.id) {
+      void handleSelectTicket(ticket)
+    }
+  }, [searchParams, tickets, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadTickets() {
     setLoading(true)
@@ -128,44 +146,48 @@ export default function DestekPage() {
   }
 
   async function handleCreateTicket() {
-    if (!subject.trim() || !firstMessage.trim() || !companyId) return
+    if (!subject.trim() || !firstMessage.trim() || !canCreateTicket) return
     setCreating(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    setCreateError("")
 
-    const now = new Date().toISOString()
-    const { data: ticket } = await supabase
-      .from("support_tickets")
-      .insert({
-        company_id: companyId,
-        user_id: user?.id,
-        subject: subject.trim(),
-        priority,
-        sla_due_at: computeSlaDueAt(now),
-      })
-      .select()
-      .single()
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setCreateError("Oturum açmanız gerekiyor.")
+        return
+      }
 
-    if (ticket) {
-      await supabase.from("ticket_messages").insert({
-        ticket_id: ticket.id,
-        sender_type: "user",
-        sender_id: user?.id,
-        message: firstMessage.trim(),
-      })
-      // Send email notification to admin (fire-and-forget)
-      fetch("/api/support/notify", {
+      const res = await fetch("/api/support/tickets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: subject.trim(), priority, companyName: "", userName: user?.email }),
-      }).catch(() => {})
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subject: subject.trim(),
+          priority,
+          message: firstMessage.trim(),
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setCreateError(json.error || "Talep oluşturulamadı.")
+        return
+      }
+
+      const ticket = json.ticket as Ticket
       setSubject("")
       setFirstMessage("")
       setPriority("normal")
       setTab("tickets")
       await loadTickets()
-      handleSelectTicket(ticket)
+      await handleSelectTicket(ticket)
+    } catch {
+      setCreateError("Bağlantı hatası. Lütfen tekrar deneyin.")
+    } finally {
+      setCreating(false)
     }
-    setCreating(false)
   }
 
   function formatDate(d: string) {
@@ -321,6 +343,16 @@ export default function DestekPage() {
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
+              {!canCreateTicket && (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Destek talebi oluşturmak için giriş yapmalı ve bir şirkete bağlı olmalısınız.
+                </p>
+              )}
+              {createError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {createError}
+                </p>
+              )}
               <div>
                 <label className="text-sm font-medium mb-1 block">Konu</label>
                 <Input
@@ -354,7 +386,7 @@ export default function DestekPage() {
               </div>
               <Button
                 onClick={handleCreateTicket}
-                disabled={creating || !subject.trim() || !firstMessage.trim()}
+                disabled={creating || !canCreateTicket || !subject.trim() || !firstMessage.trim()}
                 className="w-full"
               >
                 {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
@@ -365,5 +397,19 @@ export default function DestekPage() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+export default function DestekPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center p-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <DestekPageContent />
+    </Suspense>
   )
 }

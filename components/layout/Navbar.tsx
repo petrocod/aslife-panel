@@ -41,7 +41,7 @@ const DYNAMIC_PATTERNS: { pattern: RegExp; title: string; description: string }[
 ]
 
 const pageInfo: Record<string, { title: string; description: string }> = {
-  "/": { title: "Özet", description: "Günlük işlemlerinize buradan devam edebilirsiniz." },
+  "/dashboard": { title: "Özet", description: "Günlük işlemlerinize buradan devam edebilirsiniz." },
   "/randevular/takvim": { title: "Takvim", description: "Randevularınızı buradan yönetebilirsiniz." },
   "/randevular/online": { title: "Online Randevular", description: "Online randevularınızı buradan yönetebilirsiniz." },
   "/odemeler": { title: "Ödemeler", description: "Ödemelerinizi buradan yönetebilirsiniz." },
@@ -145,7 +145,7 @@ function getPageInfoByPath(pathname: string, tab: string | null, opts?: PageInfo
 type Crumb = { label: string; href: string; isCurrent: boolean }
 
 function getBreadcrumb(pathname: string, tab: string | null, opts?: PageInfoOpts): Crumb[] {
-  if (!pathname || pathname === "/") return []
+  if (!pathname || pathname === "/dashboard") return []
   if (pathname === "/randevular/takvim") return []
 
   if (pathname === "/ayarlar/calisanlar" && (tab === "saatler" || tab === "primler")) {
@@ -186,7 +186,7 @@ function getBreadcrumb(pathname: string, tab: string | null, opts?: PageInfoOpts
     const n = opts?.paketPlanlaPkgName?.trim()
     const label = n && n.length > 0 ? n : "…"
     return [
-      { label: "aSistan", href: "/", isCurrent: false },
+      { label: "aSistan", href: "/dashboard", isCurrent: false },
       {
         label,
         href: pkgId ? `/hizmetler/paketler/${pkgId}` : pathname,
