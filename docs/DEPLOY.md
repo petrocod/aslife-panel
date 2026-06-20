@@ -8,8 +8,9 @@
 
 | روش | مناسب برای | فایل مرتبط |
 |-----|------------|------------|
-| **Docker روی VPS** (Hostinger و …) | جدا از wordpress / seyahatmarket | `docker-compose.yml`, `Dockerfile` |
-| **VPS + pm2 + GitHub Actions** | همان سرور بدون Docker | `.github/workflows/deploy.yml` |
+| **Docker روی VPS** (Hostinger و …) | production فعلی `asixtan.com` | `docker-compose.yml`, `Dockerfile` |
+| **GitHub Actions → Docker** | deploy خودکار بعد از push | `.github/workflows/deploy.yml` |
+| **راهنمای مرحله‌به‌مرحله** | لوکال → push → VPS | `docs/DEPLOY_WORKFLOW.md` |
 | **Vercel** | تست سریع بدون سرور | `vercel.json` |
 
 ---
@@ -76,8 +77,8 @@ crontab -e
 
 ```bash
 cd /docker/asistan
-git pull origin main
-docker compose up -d --build
+git pull origin master
+docker compose --env-file .env up -d --build
 ```
 
 ### عیب‌یابی Docker
@@ -223,56 +224,66 @@ pm2 startup   # دستور چاپ‌شده را اجرا کنید
 
 ---
 
-## GitHub Actions — deploy خودکار
+## GitHub Actions — deploy خودکار (Docker)
 
-هر **push به branch `main`** روی GitHub، workflow را اجرا می‌کند.
+**راهنمای کامل:** [`docs/DEPLOY_WORKFLOW.md`](./DEPLOY_WORKFLOW.md)
 
-**GitHub → Repository → Settings → Secrets and variables → Actions**
+هر **push به `master`** (یا `main`) یا **Run workflow دستی** در Actions:
+
+1. SSH به VPS
+2. `git pull` همان branch
+3. `docker compose --env-file .env up -d --build`
+4. health check داخل container
+
+**Secrets** (GitHub → Settings → Secrets → Actions):
 
 | Secret | مثال |
 |--------|------|
-| `DEPLOY_HOST` | `123.45.67.89` یا `asistan.example.com` |
-| `DEPLOY_USER` | `root` یا `deploy` |
+| `DEPLOY_HOST` | IP سرور Hostinger |
+| `DEPLOY_USER` | `root` |
 | `DEPLOY_SSH_KEY` | کل محتوای کلید خصوصی SSH |
-| `DEPLOY_PATH` | `/var/www/asistan` |
+| `DEPLOY_PATH` | `/docker/asistan` |
 
-**فایل workflow:** `.github/workflows/deploy.yml`  
-(در صورت نیاز مسیر build یا نام pm2 را آنجا عوض کنید.)
+**Deploy دستی از GitHub:** Actions → **Deploy Asistan** → Run workflow → branch: `master`
+
+**فایل workflow:** `.github/workflows/deploy.yml`
 
 ---
 
 ## به‌روزرسانی بعد از تغییر
 
-وقتی در Cursor/لوکال کد یا نسخه را عوض کردید:
+**جریان پیشنهادی:** لوکال `npm run dev` → تأیید → `git push origin master` → Actions سبز → `asixtan.com`
 
 ### چک‌لیست سریع
 
 | کار | کجا |
 |-----|-----|
-| شماره نسخه در UI | `package.json` → `"version"` (sidebar خودکار می‌خواند) |
-| ایمیل فروش | `.env.local` سرور → `NEXT_PUBLIC_SALES_EMAIL` |
-| آدرس سایت | `.env.local` سرور → `NEXT_PUBLIC_BASE_URL` |
-| کد اپ | git commit + push به **`main`** |
+| تست قبل از publish | لوکال `npm run dev` |
+| شماره نسخه در UI | `package.json` → `"version"` |
+| env production | VPS → `/docker/asistan/.env` |
+| کد اپ | commit + push به **`master`** |
 
 ### روش ۱ — خودکار (پیشنهادی)
 
 ```bash
 git add .
 git commit -m "توضیح تغییر"
-git push origin main
+git push origin master
 ```
 
-GitHub Actions روی سرور: `git pull` → `npm install` → `npm run build` → `pm2 restart asistan-app`
+GitHub Actions: `git pull` + `docker compose up -d --build`
 
-### روش ۲ — دستی روی سرور
+### روش ۲ — دستی از GitHub
+
+Actions → **Deploy Asistan** → **Run workflow** → branch: `master`
+
+### روش ۳ — دستی روی VPS
 
 ```bash
-ssh user@SERVER
-cd /var/www/asistan
-git pull origin main
-npm install
-npm run build
-pm2 restart asistan-app --update-env
+ssh root@SERVER
+cd /docker/asistan
+git pull origin master
+docker compose --env-file .env up -d --build
 ```
 
 ### بعد از deploy

@@ -1,51 +1,73 @@
-# استقرار خودکار برای برندهای Aslife (aSistan)
-# Secrets مورد نیاز در GitHub → Settings → Secrets → Actions:
-#   DEPLOY_HOST      (IP یا hostname سرور)
-#   DEPLOY_USER      (مثلاً root یا deploy)
-#   DEPLOY_SSH_KEY   (کلید خصوصی SSH، کل محتوای فایل)
-#   DEPLOY_PATH      (مسیر مطلق پروژه روی سرور، مثلاً /root/Asistan)
+# Deploy aSistan → Hostinger VPS (Docker)
+#
+# GitHub → Settings → Secrets and variables → Actions:
+#   DEPLOY_HOST     IP یا hostname سرور
+#   DEPLOY_USER     مثلاً root
+#   DEPLOY_SSH_KEY  کل محتوای کلید خصوصی SSH
+#   DEPLOY_PATH     مثلاً /docker/asistan
+#
+# روی سرور: فایل .env (یا .env.local) + git clone + docker compose
 
 name: Deploy Asistan
 
 on:
   push:
     branches:
+      - master
       - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        required: false
+        default: master
 
 concurrency:
-  group: deploy-asistan-${{ github.ref }}
+  group: deploy-asistan
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
+      - name: Deploy over SSH (Docker)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
+          command_timeout: 30m
           script: |
             set -euo pipefail
             APP_DIR="${{ secrets.DEPLOY_PATH }}"
+            BRANCH="${{ github.event.inputs.branch || github.ref_name }}"
+
+            echo "==> Deploy branch: ${BRANCH}"
             cd "$APP_DIR"
 
-            if [ ! -f .env.local ]; then
-              echo "::error::فایل .env.local روی سرور یافت نشد. برای اتصال Supabase آن را ایجاد کنید."
+            if [ -f .env ]; then
+              ENV_FILE=".env"
+            elif [ -f .env.local ]; then
+              ENV_FILE=".env.local"
+            else
+              echo "::error::Neither .env nor .env.local found in ${APP_DIR}"
               exit 1
             fi
+            echo "==> Using env file: ${ENV_FILE}"
 
-            git pull origin main
+            git fetch origin "${BRANCH}"
+            git checkout "${BRANCH}" 2>/dev/null || git checkout -b "${BRANCH}" "origin/${BRANCH}"
+            git reset --hard "origin/${BRANCH}"
 
-            npm install
-            export NEXT_DISABLE_TYPECHECK=1
-            npm run build
+            docker compose --env-file "${ENV_FILE}" up -d --build
 
-            if pm2 describe asistan-app >/dev/null 2>&1; then
-              pm2 restart asistan-app --update-env
-            else
-              pm2 start npm --name asistan-app -- run start
-              pm2 save
-            fi
+            echo "==> Container status"
+            docker compose ps
+
+            echo "==> Health check"
+            sleep 5
+            docker compose exec -T asistan-app node -e \
+              "fetch('http://127.0.0.1:3000/api/health').then(r=>r.json()).then(j=>{console.log(JSON.stringify(j));process.exit(j.hasSupabaseUrl?0:1)}).catch(e=>{console.error(e);process.exit(1)})"
+
+            echo "==> Deploy OK"
