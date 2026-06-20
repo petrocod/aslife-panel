@@ -10,6 +10,7 @@ const nextConfig = {
   output: "standalone",
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
+    NEXT_PUBLIC_APP_BUILD_TIME: new Date().toISOString(),
     NEXT_PUBLIC_SALES_EMAIL:
       process.env.NEXT_PUBLIC_SALES_EMAIL || "satis@aslife.com.tr",
   },

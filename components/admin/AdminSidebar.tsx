@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase-client"
+import { AdminSidebarAppMeta } from "@/components/admin/AdminSidebarAppMeta"
 
 interface AdminNavItem {
   label: string
@@ -122,6 +123,7 @@ export function AdminSidebar() {
           <LayoutDashboard className="h-4 w-4" />
           Ana Uygulamaya Dön
         </Link>
+        <AdminSidebarAppMeta />
       </div>
     </aside>
   )
